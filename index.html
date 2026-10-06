@@ -107,21 +107,36 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// 9 หมวดหมู่หลักตามโจทย์
+// 13 หมวดหมู่หลักตามโจทย์ใหม่
 const CATEGORIES = [
-  'เสื้อปกดำแถบดำ',
-  'เสื้อปกขอบดำ',
-  'เสื้อรุ่น ปี 65',
-  'เสื้อรุ่นปี 66',
+  'เสื้อปกแถบดำ ชาย',
+  'เสื้อปกแถบดำ หญิง',
+  'เสื้อปกขอบดำ ชาย',
+  'เสื้อปกขอบดำ หญิง',
+  'เสื้อ 65 ชาย',
+  'เสื้อ 65 หญิง',
+  'เสื้อ 66 ชาย',
+  'เสื้อ 66 หญิง',
   'เสื้อแจ๊คเก็ต ดำ-แดง',
-  'เสื้อแจ๊คเก็ต ปฏิบัติ',
-  'ย่ามนำจ่ายและอุปกรณ์',
+  'เสื้อแจ๊คเก็ต ปฏิบัติการ',
+  'ย่ามนำจ่าย และ อุปกรณ์',
   'หมวกนิรภัย',
   'เสื้อกันฝน'
 ];
 
-const MODEL_OPTIONS = ['ชาย', 'หญิง', 'ย่ามนำจ่าย', 'ตะแกรง', 'ทั่วไป / ไม่ระบุ'];
-const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'ฟรีไซซ์ (Free Size)', 'ไม่ระบุ / -'];
+const MODEL_OPTIONS = [
+  'ทั่วไป / ไม่ระบุ',
+  'ย่ามนำจ่าย แบบ ก.',
+  'ย่ามนำจ่าย ฝาครอบ',
+  'ย่ามนำจ่าย ตาข่าย',
+  'ย่ามนำจ่าย แบบ ก. - ปี 66',
+  'ย่ามนำจ่าย ฝาครอบ - ปี 66',
+  'ย่ามนำจ่าย ตาข่าย - ปี 66',
+  'ทรงสูงย่ามสะพาย',
+  'ตะแกรงครอบท่อไอเสีย'
+];
+
+const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '10XL', '11XL', 'ฟรีไซซ์ (Free Size)', 'ไม่ระบุ / -'];
 
 const S = {
   token: localStorage.getItem('token'),
@@ -134,7 +149,7 @@ const S = {
 
 const canEdit = () => S.role === 'editor';
 const thDate = d => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-const pn = p => [p.type, p.model, p.size].filter(Boolean).join(' ');
+const pn = p => [p.type, p.model !== 'ทั่วไป / ไม่ระบุ' ? p.model : '', p.size !== 'ไม่ระบุ / -' ? p.size : ''].filter(Boolean).join(' ');
 const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const img = p => p && p.image ? `<img class="th" src="${esc(p.image)}" loading="lazy" alt="">` : '<span class="th"></span>';
 
@@ -146,7 +161,7 @@ function bal() {
 
 function tbl(heads, rows) {
   return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
-    rows.map(r => `<tr class="${r.cls || ''}">${
+    rows.map(r => `<tr class="${r.cls \vert{}\vert{} ''}">${
       r.map(c => c && typeof c === 'object' ? `<td class="${c.c || ''}">${c.h}</td>` : `<td class="${typeof c === 'number' ? 'num' : ''}">${esc(c)}</td>`).join('')
     }</tr>`).join('') || `<tr><td colspan="${heads.length}" style="text-align:center;color:#64748b;padding:16px;">ไม่มีข้อมูล</td></tr>`
   }</tbody></table></div>`;
@@ -241,7 +256,6 @@ function vSummary() {
     else if (p.min > 0 && qty <= p.min) lowCount++;
   });
 
-  // สินค้าที่หมดคลัง
   const zeroProducts = S.products.filter(p => (b[p.id] || 0) <= 0);
   const zeroRows = zeroProducts.map(p => [
     { h: img(p) },
@@ -251,7 +265,6 @@ function vSummary() {
     { h: `<span class="badge badge-zero">หมดคลัง (0)</span>`, c: 'num' }
   ]);
 
-  // สรุปยอดแยกตามหมวดหมู่หลักทั้ง 9 หมวด
   const allCats = [...new Set([...CATEGORIES, ...S.products.map(p => p.type)])];
   let catHtml = '';
 
@@ -277,11 +290,10 @@ function vSummary() {
     catHtml += `
       <div class="cat-card">
         <h3><span>${esc(cat)}</span> <span class="count-tag">คงเหลือรวม ${catTotal}</span></h3>
-        ${tbl(['แบบ / เพศ', 'ขนาด (Size)', 'คงเหลือ'], itemRows)}
+        ${tbl(['แบบ / รายละเอียด', 'ขนาด (Size)', 'คงเหลือ'], itemRows)}
       </div>`;
   });
 
-  // จ่ายสูงสุด 5 อันดับ
   const to = {};
   S.txs.filter(t => t.kind === 'out' && t.party).forEach(t => to[t.party] = (to[t.party] || 0) + t.qty);
   const topParties = Object.entries(to).sort((a, c) => c[1] - a[1]).slice(0, 5);
@@ -296,7 +308,7 @@ function vSummary() {
 
     ${zeroCount > 0 ? `
       <h2>⚠️ แจ้งเตือนสินค้าที่หมดจากคลังแล้ว (${zeroCount} รายการ)</h2>
-      ${tbl(['', 'ประเภท', 'แบบ / เพศ', 'ขนาด', 'สถานะ'], zeroRows)}
+      ${tbl(['', 'ประเภท', 'แบบ / อุปกรณ์', 'ขนาด', 'สถานะ'], zeroRows)}
       <div style="height:20px;"></div>
     ` : ''}
 
@@ -316,7 +328,7 @@ function vSummary() {
 function vReport() {
   $('#v').innerHTML = `
     <div class="bar">
-      <input id="q" placeholder="🔍 ค้นหาสินค้า เช่น แจ๊คเก็ต, ชาย, XL..." oninput="drawReport()">
+      <input id="q" placeholder="🔍 ค้นหาสินค้า เช่น ปกขอบดำ, ชาย, XL, ย่าม..." oninput="drawReport()">
       <button onclick="exportCsv()">📄 ส่งออก CSV</button>
     </div>
     <div id="r"></div>`;
@@ -353,7 +365,7 @@ function drawReport() {
     html += `
       <div class="cat-card">
         <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">${prods.length} รายการ</span></h3>
-        ${tbl(['รูป', 'แบบ/เพศ', 'ไซซ์', 'คงเหลือ'], rows.map(r => { const arr = r.data; arr.cls = r.cls; return arr; }))}
+        ${tbl(['รูป', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], rows.map(r => { const arr = r.data; arr.cls = r.cls; return arr; }))}
       </div>`;
   });
 
@@ -364,7 +376,7 @@ function drawReport() {
 
 function exportCsv() {
   const b = bal();
-  const lines = [['ประเภท', 'แบบ/เพศ', 'ไซซ์', 'คงเหลือ'], ...S.products.map(p => [p.type, p.model || '', p.size || '', b[p.id] || 0])]
+  const lines = [['ประเภท', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], ...S.products.map(p => [p.type, p.model || '', p.size || '', b[p.id] || 0])]
     .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv' }));
@@ -513,11 +525,11 @@ function vItems() {
       <input type="hidden" name="pid">
       <input type="hidden" name="image">
 
-      <label>ประเภทสินค้า
+      <label>ประเภทสินค้า (13 หมวด)
         <select name="type" required>${catOpts}</select>
       </label>
 
-      <label>แบบ / เพศ
+      <label>แบบ / อุปกรณ์
         <select name="model">${modelOpts}</select>
       </label>
 
@@ -558,7 +570,7 @@ function drawItems() {
       canEdit() ? { h: `<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')" style="color:var(--danger)">ลบ</button>` } : ''
     ]);
 
-  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'แบบ/เพศ', 'ไซซ์', 'แจ้งเตือนที่', 'จัดการ'], rows);
+  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'แบบ/อุปกรณ์', 'ไซซ์', 'แจ้งเตือนที่', 'จัดการ'], rows);
 }
 
 async function pickImg(inp) {
@@ -618,8 +630,7 @@ async function delProd(id) {
   } catch (e) { alert(e.message); }
 }
 
-/* 5. Import View */
-const KNOWN = CATEGORIES;
+/* 5. CSV Import & Smart Category Guesser */
 function parseCsv(t) {
   t = t.replace(/^\ufeff/, ''); const rows = []; let r = [], c = '', q = false;
   for (let i = 0; i < t.length; i++) {
@@ -635,15 +646,59 @@ function parseCsv(t) {
 }
 
 function cleanName(s) { return String(s || '').replace(/\\/g, '').replace(/\s+/g, ' ').trim(); }
+
+// ระบบแกะข้อมูลจากชื่อสินค้าใน CSV เพื่อจำแนกประเภท 13 หมวดให้อัตโนมัติ
 function guess(raw) {
-  let s = cleanName(raw), size = '', g = '';
-  const m = /^((?:\d{1,2})?XL|XS|S|M|L)(?:\s*([ชญ]))?(?=\s|$)/i.exec(s);
-  if (m) { size = m[1].toUpperCase(); g = m[2] || ''; s = s.slice(m[0].length).replace(/^\s*-\s*/, '').trim(); }
-  if (g) size += ' ' + g;
-  const k = KNOWN.find(x => s.startsWith(x));
-  if (k) return { type: k, model: s.slice(k.length).replace(/^\s*-\s*/, '').trim(), size };
-  if (g) return { type: 'เสื้อปกดำแถบดำ', model: s, size };
-  const [t, ...rest] = s.split(' '); return { type: t || '', model: rest.join(' '), size };
+  let s = cleanName(raw);
+  let type = '', model = '', size = '';
+
+  // 1. หาเพศ (ชาย / หญิง / ช / ญ)
+  let gender = '';
+  if (/ชาย|\bช\b/i.test(s)) gender = 'ชาย';
+  else if (/หญิง|\bญ\b/i.test(s)) gender = 'หญิง';
+
+  // 2. หาขนาด Size (S, M, L, XL, 2XL, 3XL, 10XL, 11XL ฯลฯ)
+  const sizeMatch = /((?:\d{1,2})?XL|XS|S|M|L)\b/i.exec(s);
+  if (sizeMatch) {
+    size = sizeMatch[1].toUpperCase();
+  }
+
+  // 3. จำแนกประเภท
+  if (s.includes('หมวกนิรภัย') || s.includes('หมวก')) {
+    type = 'หมวกนิรภัย';
+  } else if (s.includes('เสื้อกันฝน') || s.includes('กันฝน')) {
+    type = 'เสื้อกันฝน';
+  } else if (s.includes('ดำ-แดง') || s.includes('ดำแดง')) {
+    type = 'เสื้อแจ๊คเก็ต ดำ-แดง';
+  } else if (s.includes('ปฏิบัติการ') || s.includes('ปฏิบัติ')) {
+    type = 'เสื้อแจ๊คเก็ต ปฏิบัติการ';
+  } else if (s.includes('ย่าม') || s.includes('ตะแกรง') || s.includes('ฝาครอบ') || s.includes('ตาข่าย') || s.includes('ทรงสูง')) {
+    type = 'ย่ามนำจ่าย และ อุปกรณ์';
+    if (s.includes('แบบ ก.') && s.includes('66')) model = 'ย่ามนำจ่าย แบบ ก. - ปี 66';
+    else if (s.includes('ฝาครอบ') && s.includes('66')) model = 'ย่ามนำจ่าย ฝาครอบ - ปี 66';
+    else if (s.includes('ตาข่าย') && s.includes('66')) model = 'ย่ามนำจ่าย ตาข่าย - ปี 66';
+    else if (s.includes('แบบ ก.')) model = 'ย่ามนำจ่าย แบบ ก.';
+    else if (s.includes('ฝาครอบ')) model = 'ย่ามนำจ่าย ฝาครอบ';
+    else if (s.includes('ตาข่าย')) model = 'ย่ามนำจ่าย ตาข่าย';
+    else if (s.includes('ทรงสูง')) model = 'ทรงสูงย่ามสะพาย';
+    else if (s.includes('ตะแกรง')) model = 'ตะแกรงครอบท่อไอเสีย';
+  } else if (s.includes('65')) {
+    type = gender === 'หญิง' ? 'เสื้อ 65 หญิง' : 'เสื้อ 65 ชาย';
+  } else if (s.includes('66')) {
+    type = gender === 'หญิง' ? 'เสื้อ 66 หญิง' : 'เสื้อ 66 ชาย';
+  } else if (s.includes('ขอบดำ')) {
+    type = gender === 'หญิง' ? 'เสื้อปกขอบดำ หญิง' : 'เสื้อปกขอบดำ ชาย';
+  } else if (s.includes('แถบดำ') || s.includes('ปกดำ')) {
+    type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
+  } else {
+    // ถ้าไม่เข้าเงื่อนไข ให้ใช้หมวดเสื้อตามเพศ หรือหมวดแรก
+    type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
+  }
+
+  if (!model) model = 'ทั่วไป / ไม่ระบุ';
+  if (!size) size = 'ไม่ระบุ / -';
+
+  return { type, model, size };
 }
 
 function parseDate(v) {
@@ -661,7 +716,7 @@ let IM = null;
 function vImport() {
   $('#v').innerHTML = `
     <h2>📥 นำเข้าข้อมูลจากไฟล์ CSV</h2>
-    <p style="color:#64748b;">เปิดไฟล์ CSV จาก Google Sheets เพื่อนำเข้าประวัติรายการย้อนหลัง</p>
+    <p style="color:#64748b;">ระบบจะทำการอ่านข้อมูลและแยกเข้า 13 หมวดหมู่ให้อัตโนมัติ</p>
     <input type="file" accept=".csv,text/csv" onchange="readCsv(this)">
     <div id="r"></div>`;
 }
@@ -682,9 +737,9 @@ async function readCsv(inp) {
 }
 
 function drawImport() {
-  const catOpts = CATEGORIES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
   const rows = IM.keys.map((k, i) => {
     const g = guess(k);
+    const catOpts = CATEGORIES.map(t => `<option value="${esc(t)}" ${t === g.type ? 'selected' : ''}>${esc(t)}</option>`).join('');
     return [
       k,
       IM.names[k],
@@ -696,7 +751,7 @@ function drawImport() {
 
   $('#r').innerHTML = (IM.warn.length ? `<h2>ข้อควรตรวจ (${IM.warn.length})</h2><ul>${IM.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '') +
     `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2>` +
-    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภท', 'แบบ', 'ไซซ์'], rows) +
+    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภท (13 หมวด)', 'แบบ/รายละเอียด', 'ไซซ์'], rows) +
     `<p><button class="p" onclick="runImport()">นำเข้าข้อมูลลงระบบ</button></p>`;
 }
 
