@@ -47,7 +47,7 @@ button.s,form button[type=button],.bar button{font:inherit;padding:6px 12px;bord
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const TYPES=['เสื้อ','แจ็คเก็ต','ย่ามนำจ่าย','หมวกนิรภัย','เสื้อกันฝน','ตะแกรงครอบท่อไอเสีย'];
+const TYPES=['เสื้อ','แจ๊คเก็ต','ย่ามนำจ่าย','หมวกนิรภัย','เสื้อกันฝน','ตะแกรงครอบท่อไอเสีย'];
 const S={token:localStorage.getItem('token'),role:localStorage.getItem('role'),tab:'summary',products:[],txs:[]};
 const canEdit=()=>S.role==='editor';
 const thDate=d=>new Date(d+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
@@ -78,8 +78,9 @@ async function load(){try{const d=await api('data');S.products=d.products;S.txs=
 function render(){
   if(!S.token){$('#app').innerHTML=`<div class="login"><form onsubmit="login(event)"><h2>เข้าสู่ระบบคลังสินค้า</h2><label>รหัสผ่าน<input id="pw" type="password" autocomplete="current-password" required autofocus></label><div class="err" id="err"></div><button>เข้าสู่ระบบ</button></form></div>`;return}
   const tabs=[['summary','สรุป'],['report','สินค้าคงเหลือ'],['tx','รับเข้า/จ่ายออก'],['items','รายการสินค้า']];
+  if(canEdit())tabs.push(['import','นำเข้าข้อมูล']);
   $('#app').innerHTML=`<header><b>คลังสินค้า</b><nav>${tabs.map(([k,l])=>`<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('')}</nav><span>${canEdit()?'แก้ไขได้':'ดูอย่างเดียว'} <button onclick="logout()">ออกจากระบบ</button></span></header><main id="v"></main>`;
-  ({summary:vSummary,report:vReport,tx:vTx,items:vItems})[S.tab]();
+  ({summary:vSummary,report:vReport,tx:vTx,items:vItems,import:vImport})[S.tab]();
 }
 function go(t){S.tab=t;render()}
 
@@ -189,6 +190,83 @@ function editProd(id){
 async function delProd(id){
   if(!confirm('ลบรายการสินค้านี้?'))return;
   try{await api('data',{action:'deleteProduct',id});S.products=S.products.filter(p=>p.id!==id);drawItems()}catch(e){alert(e.message)}
+}
+
+const KNOWN=['เสื้อกันฝน','หมวกนิรภัย','ตะแกรงครอบท่อไอเสีย','ย่ามนำจ่าย','แจ๊คเก็ต','เสื้อ'];
+function parseCsv(t){
+  t=t.replace(/^\ufeff/,'');const rows=[];let r=[],c='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===','){r.push(c);c=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);rows.push(r);r=[];c=''}
+    else c+=ch}
+  if(c||r.length){r.push(c);rows.push(r)}
+  return rows;
+}
+function cleanName(s){return String(s||'').replace(/\\/g,'').replace(/\s+/g,' ').trim()}
+function guess(raw){
+  let s=cleanName(raw),size='',g='';
+  const m=/^((?:\d{1,2})?XL|XS|S|M|L)(?:\s*([ชญ]))?(?=\s|$)/i.exec(s);
+  if(m){size=m[1].toUpperCase();g=m[2]||'';s=s.slice(m[0].length).replace(/^\s*-\s*/,'').trim()}
+  if(g)size+=' '+g;
+  const k=KNOWN.find(x=>s.startsWith(x));
+  if(k)return{type:k,model:s.slice(k.length).replace(/^\s*-\s*/,'').trim(),size};
+  if(g)return{type:'เสื้อ',model:s,size};
+  const [t,...rest]=s.split(' ');return{type:t||'',model:rest.join(' '),size};
+}
+function parseDate(v){
+  v=String(v||'').trim();let y,m,d,x;
+  if(x=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v)){d=+x[1];m=+x[2];y=+x[3]}
+  else if(x=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v)){y=+x[1];m=+x[2];d=+x[3]}
+  else return null;
+  if(y>2400)y-=543;
+  const dt=new Date(Date.UTC(y,m-1,d));
+  if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return null;
+  return dt.toISOString().slice(0,10);
+}
+
+let IM=null;
+function vImport(){
+  $('#v').innerHTML=`<h2>นำเข้าข้อมูลจากชีตเดิม</h2><p>ใน Google Sheets เปิดแท็บ Transaction แล้วเลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยคอมมา (.csv) จากนั้นเลือกไฟล์ที่นี่ ระบบจะแสดงตัวอย่างให้ตรวจก่อนนำเข้าจริง (แถวแรกต้องเป็นหัวตาราง)</p><input type="file" accept=".csv,text/csv" onchange="readCsv(this)"><div id="r"></div>`;
+}
+async function readCsv(inp){
+  const f=inp.files[0];if(!f)return;
+  const rows=parseCsv(await f.text()).slice(1).filter(r=>r.some(c=>c.trim()));
+  const warn=[],txs=[],names={};
+  rows.forEach((r,i)=>{
+    const line=i+2,key=cleanName(r[1]),date=parseDate(r[0]),qty=parseInt(String(r[2]).replace(/,/g,'')),kind={'รับเข้า':'in','จ่ายออก':'out'}[(r[3]||'').trim()];
+    if(!key||!date||!(qty>0)||!kind){warn.push(`แถว ${line} ข้ามไป: ข้อมูลไม่ครบหรืออ่านไม่ได้ (${r.slice(0,4).join(' | ')})`);return}
+    names[key]=(names[key]||0)+1;
+    txs.push({date,kind,key,qty,docNo:'',party:(r[4]||'').trim(),note:'',line});
+  });
+  const run={},neg=new Set(),seen={};
+  txs.forEach(t=>{
+    run[t.key]=(run[t.key]||0)+(t.kind==='in'?t.qty:-t.qty);
+    if(run[t.key]<0&&!neg.has(t.key)){neg.add(t.key);warn.push(`แถว ${t.line}: "${t.key}" จ่ายออกจนยอดติดลบ (${run[t.key]}) ควรตรวจลำดับหรือยอดตั้งต้น`)}
+    const s=[t.date,t.kind,t.key,t.qty,t.party].join('|');
+    if(seen[s])warn.push(`แถว ${t.line}: ซ้ำกับแถว ${seen[s]} ทุกช่อง`);else seen[s]=t.line;
+  });
+  IM={txs,warn,names,keys:Object.keys(names).sort((a,b)=>a.localeCompare(b,'th'))};
+  drawImport();
+}
+function drawImport(){
+  const types=[...new Set([...TYPES,...S.products.map(p=>p.type)])].map(t=>`<option value="${esc(t)}">`).join('');
+  const inp=(i,f,v)=>({h:`<input data-i="${i}" data-f="${f}" value="${esc(v)}" list="tl2">`});
+  const rows=IM.keys.map((k,i)=>{const g=guess(k);return[k,IM.names[k],inp(i,'type',g.type),{h:`<input data-i="${i}" data-f="model" value="${esc(g.model)}">`},{h:`<input data-i="${i}" data-f="size" value="${esc(g.size)}">`}]});
+  $('#r').innerHTML=(IM.warn.length?`<h2>ข้อควรตรวจ (${IM.warn.length})</h2><ul>${IM.warn.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>`:'')+
+    `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2><p>แก้ประเภท/แบบ/ไซซ์ในช่องได้ ถ้าแก้ให้ตรงกันหลายแถว ระบบจะรวมเป็นสินค้าเดียว</p>`+
+    tbl(['ชื่อในชีต','จำนวนแถว','ประเภท','แบบ','ไซซ์'],rows)+`<datalist id="tl2">${types}</datalist><p><button class="p" onclick="runImport()">นำเข้าข้อมูล</button></p>`;
+}
+async function runImport(force){
+  const ps=IM.keys.map(k=>({key:k}));
+  document.querySelectorAll('#r input[data-i]').forEach(el=>{ps[+el.dataset.i][el.dataset.f]=el.value.trim()});
+  const bad=ps.find(p=>!p.type);if(bad)return alert(`กรุณาระบุประเภทของ "${bad.key}"`);
+  try{
+    const d=await api('data',{action:'bulkImport',products:ps,txs:IM.txs.map(({line,...t})=>t),force});
+    alert(`นำเข้าแล้ว: รับ-จ่าย ${d.txs} รายการ (สินค้าในระบบรวม ${d.products} รายการ)`);
+    IM=null;S.tab='report';await load();
+  }catch(e){if(e.data&&e.data.exists){if(confirm(e.message+'\nต้องการนำเข้าต่อท้ายหรือไม่?'))runImport(true)}else alert(e.message)}
 }
 
 if(S.token)load();else render();
