@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--ink:#1c2630;--paper:#f2f4f6;--line:#d3d9df;--navy:#16395c;--in:#1f7a4d;--out:#c4510d;--hi:#fde9d9}
+:root{--ink:#1c2630;--paper:#f2f4f6;--line:#d3d9df;--navy:#16395c;--in:#1f7a4d;--inbg:#e6f4ec;--out:#c4510d;--outbg:#fde9d9;--warn:#b45309;--warnbg:#fef3c7}
 *{box-sizing:border-box}
 body{margin:0;font:15px/1.5 'IBM Plex Sans Thai',system-ui,sans-serif;color:var(--ink);background:var(--paper)}
 header{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:var(--navy);color:#fff;padding:10px 16px}
@@ -16,17 +16,22 @@ header nav{display:flex;gap:2px;flex:1;flex-wrap:wrap}
 header button{background:none;border:0;color:#cfe0f1;padding:6px 12px;border-radius:4px;font:inherit;cursor:pointer}
 header button.on{background:#fff;color:var(--navy);font-weight:500}
 header span{font-size:13px}
-main{max-width:1000px;margin:0 auto;padding:16px}
+main{max-width:1200px;margin:0 auto;padding:16px}
 h2{font-size:17px;margin:22px 0 8px}
+h3{font-size:15px;margin:14px 0 6px}
 table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line)}
 th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 th{background:#e8ecf0;font-weight:500}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .tw{overflow-x:auto}
 .th{display:inline-block;width:44px;height:44px;object-fit:cover;border-radius:4px;background:#e1e6ea;vertical-align:middle}
-.low{color:var(--out)}
-tr.lowrow td{background:var(--hi)}
+.low{color:var(--out);font-weight:500}
+.zero{color:#b91c1c;font-weight:700}
+tr.lowrow td{background:var(--warnbg)}
+tr.zerorow td{background:#fee2e2}
 .in{color:var(--in);font-weight:500}.out{color:var(--out);font-weight:500}
+.badge-in{background:var(--inbg);color:var(--in);padding:2px 8px;border-radius:10px;font-size:13px;font-weight:500}
+.badge-out{background:var(--outbg);color:var(--out);padding:2px 8px;border-radius:10px;font-size:13px;font-weight:500}
 form{background:#fff;border:1px solid var(--line);padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 14px;align-items:end}
 form h2{grid-column:1/-1;margin:0}
 label{display:flex;flex-direction:column;gap:3px;font-size:13px}
@@ -36,10 +41,29 @@ input,select{font:inherit;padding:7px 8px;border:1px solid #aab4be;border-radius
 button.p,form button{font:inherit;padding:8px 16px;border:0;border-radius:4px;background:var(--navy);color:#fff;cursor:pointer;min-height:36px}
 button.s,form button[type=button],.bar button{font:inherit;padding:6px 12px;border:1px solid #aab4be;border-radius:4px;background:#fff;color:var(--ink);cursor:pointer}
 .bar{display:flex;gap:8px;margin:14px 0 8px}.bar input{flex:1}
-.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 24px}
-.login{max-width:320px;margin:15vh auto;padding:0 16px}.login form{display:flex;flex-direction:column;align-items:stretch}
-.err{color:var(--out);min-height:1.4em}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px}
+.card h3{margin:0 0 8px;font-size:14px;color:var(--navy);border-bottom:2px solid var(--line);padding-bottom:6px}
+.card .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}
+.chip{background:#f8fafc;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.chip .n{font-weight:700;font-variant-numeric:tabular-nums}
+.chip.low{background:var(--warnbg);border-color:var(--warn)}
+.chip.zero{background:#fee2e2;border-color:#b91c1c}
+.alert{background:#fee2e2;border:1px solid #b91c1c;border-radius:6px;padding:10px 14px;margin:10px 0}
+.alert h3{margin:0 0 6px;color:#b91c1c}
+.alert ul{margin:0;padding-left:20px}
+.alert li{margin:3px 0}
+.login{max-width:480px;margin:10vh auto;padding:0 16px}
+.login form{display:flex;flex-direction:column;align-items:stretch;padding:28px}
+.login form h2{font-size:22px;text-align:center;margin:0 0 20px}
+.login input{font-size:20px;height:56px;padding:0 16px;text-align:center;letter-spacing:2px}
+.login button{font-size:18px;height:52px;margin-top:8px}
+.err{color:var(--out);min-height:1.4em;text-align:center}
 :focus-visible{outline:2px solid var(--out);outline-offset:1px}
+.tx-row-in{background:var(--inbg)!important}
+.tx-row-out{background:var(--outbg)!important}
+.edit-form{background:#fffbe6;border:2px solid var(--warn);border-radius:6px;padding:12px;margin:10px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px 12px;align-items:end}
+.edit-form h3{grid-column:1/-1;margin:0}
 </style>
 </head>
 <body>
@@ -47,20 +71,30 @@ button.s,form button[type=button],.bar button{font:inherit;padding:6px 12px;bord
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const TYPES=['เสื้อ','แจ๊คเก็ต','ย่ามนำจ่าย','หมวกนิรภัย','เสื้อกันฝน','ตะแกรงครอบท่อไอเสีย'];
+const CATEGORIES=[
+  {id:'shirt-black-strip',label:'เสื้อปกดำแถบดำ',genders:['ชาย','หญิง'],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'shirt-black-edge',label:'เสื้อปกขอบดำ',genders:['ชาย','หญิง'],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'shirt-65',label:'เสื้อรุ่น ปี 65',genders:['ชาย','หญิง'],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'shirt-66',label:'เสื้อรุ่น ปี 66',genders:['ชาย','หญิง'],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'jacket-black-red',label:'เสื้อแจ๊คเก็ต ดำ-แดง',genders:[],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'jacket-action',label:'เสื้อแจ๊คเก็ต ปฏิบัติ',genders:[],sizes:['S','M','L','XL','XXL','XXXL']},
+  {id:'bag',label:'ย่ามนำจ่ายและอุปกรณ์',genders:[],sizes:[],subs:['ย่ามแบบ A','ย่ามแบบ B','ย่ามแบบ C','ตะแกรง']},
+  {id:'helmet',label:'หมวกนิรภัย',genders:[],sizes:['S','M','L','XL']},
+  {id:'raincoat',label:'เสื้อกันฝน',genders:[],sizes:['S','M','L','XL','XXL','XXXL']},
+];
 const S={token:localStorage.getItem('token'),role:localStorage.getItem('role'),tab:'summary',products:[],txs:[]};
 const canEdit=()=>S.role==='editor';
 const thDate=d=>new Date(d+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
-const pn=p=>[p.type,p.model,p.size].filter(Boolean).join(' ');
+const pn=p=>[p.category||p.type,p.model,p.gender,p.size].filter(Boolean).join(' ');
 const today=()=>new Date(Date.now()+7*36e5).toISOString().slice(0,10);
 const img=p=>p&&p.image?`<img class="th" src="${esc(p.image)}" loading="lazy" alt="">`:'<span class="th"></span>';
 function bal(){const m={};S.txs.forEach(t=>m[t.productId]=(m[t.productId]||0)+(t.kind==='in'?t.qty:-t.qty));return m}
-function tbl(heads,rows){return `<div class="tw"><table><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map(r=>`<tr class="${r.cls||''}">${r.map(c=>c&&typeof c==='object'?`<td class="${c.c||''}">${c.h}</td>`:`<td class="${typeof c==='number'?'num':''}">${esc(c)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${heads.length}">ไม่มีข้อมูล</td></tr>`}</table></div>`}
-
+function catLabel(id){const c=CATEGORIES.find(x=>x.id===id);return c?c.label:id}
+function tbl(heads,rows){return `<div class="tw"><table><tr>${heads.map(h=>`<th>${esc(h)}</th`).join('')}</tr>${rows.map(r=>`<tr class="${r.cls||''}">${r.map(c=>c&&typeof c==='object'?`<td class="${c.c||''}">${c.h}</td>`:`<td class="${typeof c==='number'?'num':''}">${esc(c)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${heads.length}">ไม่มีข้อมูล</td></tr>`}</table></div>`}
 async function api(path,body){
   const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+S.token},body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
-  if(r.status===401){logout();throw new Error('หมดเวลาเข้าใช้งาน กรุณาเข้าสู่ระบบใหม่')}
+  if(r.status===401){logout();throw new Error('หมดเวลาใช้งาน กรุณาเข้าสู่ระบบใหม่')}
   if(!r.ok)throw Object.assign(new Error(j.error||'เกิดข้อผิดพลาด'),{data:j});
   return j;
 }
@@ -74,7 +108,6 @@ async function login(ev){
 }
 function logout(){localStorage.removeItem('token');localStorage.removeItem('role');S.token=null;render()}
 async function load(){try{const d=await api('data');S.products=d.products;S.txs=d.txs;render()}catch(e){alert(e.message)}}
-
 function render(){
   if(!S.token){$('#app').innerHTML=`<div class="login"><form onsubmit="login(event)"><h2>เข้าสู่ระบบคลังสินค้า</h2><label>รหัสผ่าน<input id="pw" type="password" autocomplete="current-password" required autofocus></label><div class="err" id="err"></div><button>เข้าสู่ระบบ</button></form></div>`;return}
   const tabs=[['summary','สรุป'],['report','สินค้าคงเหลือ'],['tx','รับเข้า/จ่ายออก'],['items','รายการสินค้า']];
@@ -83,21 +116,29 @@ function render(){
   ({summary:vSummary,report:vReport,tx:vTx,items:vItems,import:vImport})[S.tab]();
 }
 function go(t){S.tab=t;render()}
-
 function vSummary(){
-  const b=bal(),tot={};S.products.forEach(p=>tot[p.type]=(tot[p.type]||0)+(b[p.id]||0));
-  const low=S.products.filter(p=>p.min>0&&(b[p.id]||0)<=p.min);
+  const b=bal();
+  const zero=S.products.filter(p=>(b[p.id]||0)===0);
+  const low=S.products.filter(p=>p.min>0&&(b[p.id]||0)<=p.min&&(b[p.id]||0)>0);
+  const cards=CATEGORIES.map(c=>{
+    const items=S.products.filter(p=>(p.category||p.type)===c.label||(p.category||p.type)===c.id);
+    const chips=items.map(p=>{
+      const n=b[p.id]||0;
+      const cls=n===0?'zero':(p.min>0&&n<=p.min?'low':'');
+      const label=[p.model,p.gender,p.size].filter(Boolean).join(' ')||'(ไม่ระบุ)';
+      return `<div class="chip ${cls}"><span>${esc(label)}</span><span class="n">${n}</span></div>`;
+    }).join('');
+    return `<div class="card"><h3>${esc(c.label)}</h3><div class="grid">${chips||'<span style="color:#999">ไม่มีสินค้า</span>'}</div></div>`;
+  }).join('');
   const mo={};S.txs.forEach(t=>{const m=t.date.slice(0,7);(mo[m]=mo[m]||{in:0,out:0})[t.kind]+=t.qty});
   const ms=Object.keys(mo).sort().slice(-6).reverse();
-  const to={};S.txs.filter(t=>t.kind==='out'&&t.party).forEach(t=>to[t.party]=(to[t.party]||0)+t.qty);
-  const top=Object.entries(to).sort((a,c)=>c[1]-a[1]).slice(0,5);
   const mlabel=m=>new Date(m+'-01T00:00:00').toLocaleDateString('th-TH',{month:'long',year:'numeric'});
-  $('#v').innerHTML=`<div class="cols"><div><h2>คงเหลือแยกตามประเภท</h2>${tbl(['ประเภท','คงเหลือ'],Object.entries(tot))}</div>
-  <div><h2>สินค้าใกล้หมด</h2>${tbl(['สินค้า','คงเหลือ','แจ้งเตือนที่'],low.map(p=>[pn(p),{h:`<b class="low">${b[p.id]||0}</b>`,c:'num'},p.min]))}</div>
-  <div><h2>รับ-จ่ายรายเดือน (6 เดือนล่าสุด)</h2>${tbl(['เดือน','รับเข้า','จ่ายออก'],ms.map(m=>[mlabel(m),mo[m].in,mo[m].out]))}</div>
-  <div><h2>จ่ายให้มากที่สุด 5 อันดับ</h2>${tbl(['ผู้รับ','จำนวนรวม'],top)}</div></div>`;
+  $('#v').innerHTML=`
+  ${zero.length?`<div class="alert"><h3>⚠ สินค้าหมดจากคลัง (${zero.length})</h3><ul>${zero.map(p=>`<li>${esc(pn(p))}</li>`).join('')}</ul></div>`:''}
+  ${low.length?`<div class="alert" style="background:var(--warnbg);border-color:var(--warn)"><h3 style="color:var(--warn)">⚠ สินค้าใกล้หมด (${low.length})</h3><ul>${low.map(p=>`<li>${esc(pn(p))} — เหลือ ${b[p.id]} (เตือนที่ ${p.min})</li>`).join('')}</ul></div>`:''}
+  <h2>คงเหลือแยกตามหมวด</h2><div class="cols">${cards}</div>
+  <h2>รับ-จ่ายรายเดือน (6 เดือนล่าสุด)</h2>${tbl(['เดือน','รับเข้า','จ่ายออก'],ms.map(m=>[mlabel(m),mo[m].in,mo[m].out]))}`;
 }
-
 function vReport(){
   $('#v').innerHTML=`<div class="bar"><input id="q" placeholder="ค้นหา เช่น แจ็คเก็ต XL" oninput="drawReport()"><button onclick="exportCsv()">ส่งออก CSV</button></div><div id="r"></div>`;drawReport();
 }
@@ -106,65 +147,106 @@ function reportRows(){
   return S.products.filter(p=>pn(p).toLowerCase().includes(q)).sort((x,y)=>pn(x).localeCompare(pn(y),'th')).map(p=>({p,n:b[p.id]||0}));
 }
 function drawReport(){
-  const rows=reportRows().map(({p,n})=>{const r=[{h:img(p)},pn(p),p.type,{h:`<b class="${p.min>0&&n<=p.min?'low':''}">${n}</b>`,c:'num'}];if(p.min>0&&n<=p.min)r.cls='lowrow';return r});
-  $('#r').innerHTML=tbl(['','สินค้า','ประเภท','คงเหลือ'],rows);
+  const rows=reportRows().map(({p,n})=>{const r=[{h:img(p)},pn(p),p.category||p.type,{h:`<b class="${n===0?'zero':(p.min>0&&n<=p.min?'low':'')}">${n}</b>`,c:'num'}];if(n===0)r.cls='zerorow';else if(p.min>0&&n<=p.min)r.cls='lowrow';return r});
+  $('#r').innerHTML=tbl(['','สินค้า','หมวด','คงเหลือ'],rows);
 }
 function exportCsv(){
-  const lines=[['สินค้า','ประเภท','คงเหลือ'],...reportRows().map(({p,n})=>[pn(p),p.type,n])].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(','));
+  const lines=[['สินค้า','หมวด','คงเหลือ'],...reportRows().map(({p,n})=>[pn(p),p.category||p.type,n])].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(','));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv'}));a.download='สินค้าคงเหลือ_'+today()+'.csv';a.click();
 }
-
 function vTx(){
   const names=S.products.map(p=>`<option value="${esc(pn(p))}">`).join('');
   const form=canEdit()?`<form id="tf" onsubmit="saveTx(event)"><h2>บันทึกรับเข้า / จ่ายออก</h2>
-  <div class="seg"><label><input type="radio" name="kind" value="in" checked>รับเข้า</label><label><input type="radio" name="kind" value="out">จ่ายออก</label></div>
+  <div class="seg"><label><input type="radio" name="kind" value="in" checked onchange="txKindStyle()">รับเข้า</label><label><input type="radio" name="kind" value="out" onchange="txKindStyle()">จ่ายออก</label></div>
   <label>วันที่<input name="date" type="date" value="${today()}" required></label>
-  <label>สินค้า<input name="prod" list="pl" placeholder="พิมพ์เพื่อค้นหา" required autocomplete="off"></label><datalist id="pl">${names}</datalist>
+  <label>สินค้า<select name="prod" required><option value="">— เลือกสินค้า —</option>${names}</select></label>
   <label>จำนวน<input name="qty" type="number" min="1" step="1" required></label>
   <label>เลขที่ส่งของ<input name="docNo"></label>
   <label>ผู้ส่ง / ผู้รับ<input name="party"></label>
   <label>หมายเหตุ<input name="note"></label>
-  <button>บันทึก</button></form>`:'';
-  $('#v').innerHTML=form+`<div class="bar"><input id="q" placeholder="ค้นหา สินค้า / เลขที่ส่งของ / ผู้ส่ง-ผู้รับ" oninput="drawTx()"></div><div id="r"></div>`;drawTx();
+  <button id="txbtn">บันทึก</button></form>`:'';
+  $('#v').innerHTML=form+`<div class="bar"><input id="q" placeholder="ค้นหา สินค้า / เลขที่ส่งของ / ผู้ส่ง-ผู้รับ" oninput="drawTx()"></div><div id="r"></div>`;
+  txKindStyle();
+  drawTx();
+}
+function txKindStyle(){
+  const f=$('#tf');if(!f)return;
+  const btn=$('#txbtn');
+  if(f.kind.value==='in'){btn.style.background='var(--in)';btn.textContent='บันทึกรับเข้า'}
+  else{btn.style.background='var(--out)';btn.textContent='บันทึกจ่ายออก'}
 }
 function drawTx(){
   const byId=Object.fromEntries(S.products.map(p=>[p.id,p])),q=($('#q')?.value||'').toLowerCase();
   const all=S.txs.map(t=>({t,name:byId[t.productId]?pn(byId[t.productId]):'(สินค้าถูกลบ)'}))
     .filter(({t,name})=>[name,t.docNo,t.party,t.note].join(' ').toLowerCase().includes(q))
     .sort((a,c)=>c.t.date.localeCompare(a.t.date)||c.t.at-a.t.at);
-  const rows=all.slice(0,300).map(({t,name})=>[thDate(t.date),{h:`<span class="${t.kind}">${t.kind==='in'?'รับเข้า':'จ่ายออก'}</span>`},name,t.qty,t.docNo||'',t.party||'',t.note||'',canEdit()?{h:`<button class="s" onclick="delTx('${t.id}')">ลบ</button>`}:'']);
-  $('#r').innerHTML=tbl(['วันที่','ประเภท','สินค้า','จำนวน','เลขที่ส่งของ','ผู้ส่ง/ผู้รับ','หมายเหตุ',''],rows)+(all.length>300?`<p>แสดง 300 จาก ${all.length} รายการ ใช้ช่องค้นหาเพื่อกรอง</p>`:'');
+  const rows=all.slice(0,300).map(({t,name})=>[thDate(t.date),{h:`<span class="badge-${t.kind}">${t.kind==='in'?'รับเข้า':'จ่ายออก'}</span>`},name,t.qty,t.docNo||'',t.party||'',t.note||'',canEdit()?{h:`<button class="s" onclick="editTx('${t.id}')">แก้ไข</button> <button class="s" onclick="delTx('${t.id}')">ลบ</button>`}:'']);
+  $('#r').innerHTML=tbl(['วันที่','ประเภท','สินค้า','จำนวน','เลขที่ส่งของ','ผู้ส่ง/ผู้รับ','หมายเหตุ',''],rows.map(r=>{r.cls=r[1].h.includes('badge-in')?'tx-row-in':'tx-row-out';return r}))+(all.length>300?`<p>แสดง 300 จาก ${all.length} รายการ ใช้ช่องค้นหาเพื่อกรอง</p>`:'');
 }
 async function saveTx(ev,force){
   if(ev)ev.preventDefault();
   const f=$('#tf'),p=S.products.find(x=>pn(x)===f.prod.value.trim());
-  if(!p)return alert('ไม่พบสินค้านี้ กรุณาเลือกจากรายการ หรือเพิ่มสินค้าในหน้า "รายการสินค้า"');
+  if(!p)return alert('กรุณาเลือกสินค้าจากรายการ');
   const tx={date:f.date.value,kind:f.kind.value,productId:p.id,qty:+f.qty.value,docNo:f.docNo.value,party:f.party.value,note:f.note.value};
   try{const d=await api('data',{action:'addTx',tx,force});S.txs.push(d.tx);vTx()}
   catch(e){if(e.data&&e.data.short){if(confirm(e.message+'\nต้องการบันทึกต่อหรือไม่?'))saveTx(null,true)}else alert(e.message)}
+}
+function editTx(id){
+  const t=S.txs.find(x=>x.id===id);if(!t)return;
+  const byId=Object.fromEntries(S.products.map(p=>[p.id,p]));
+  const p=byId[t.productId];
+  const opts=S.products.map(x=>`<option value="${esc(pn(x))}" ${pn(x)===pn(p)?'selected':''}>`).join('');
+  $('#r').insertAdjacentHTML('beforebegin',`<div class="edit-form" id="ef"><h3>แก้ไขรายการ</h3>
+  <label>วันที่<input name="date" type="date" value="${esc(t.date)}" required></label>
+  <label>ประเภท<select name="kind"><option value="in" ${t.kind==='in'?'selected':''}>รับเข้า</option><option value="out" ${t.kind==='out'?'selected':''}>จ่ายออก</option></select></label>
+  <label>สินค้า<select name="prod" required>${opts}</select></label>
+  <label>จำนวน<input name="qty" type="number" min="1" step="1" value="${t.qty}" required></label>
+  <label>เลขที่<input name="docNo" value="${esc(t.docNo||'')}"></label>
+  <label>ผู้ส่ง/ผู้รับ<input name="party" value="${esc(t.party||'')}"></label>
+  <label>หมายเหตุ<input name="note" value="${esc(t.note||'')}"></label>
+  <button onclick="saveEditTx('${t.id}')">บันทึก</button><button type="button" onclick="cancelEditTx()">ยกเลิก</button></div>`);
+  scrollTo(0,0);
+}
+function cancelEditTx(){const e=$('#ef');if(e)e.remove()}
+async function saveEditTx(id,force){
+  const f=$('#ef');if(!f)return;
+  const p=S.products.find(x=>pn(x)===f.prod.value.trim());
+  if(!p)return alert('ไม่พบสินค้า');
+  const tx={date:f.date.value,kind:f.kind.value,productId:p.id,qty:+f.qty.value,docNo:f.docNo.value,party:f.party.value,note:f.note.value};
+  try{const d=await api('data',{action:'updateTx',id,tx,force});const i=S.txs.findIndex(t=>t.id===id);if(i>=0)S.txs[i]=d.tx;cancelEditTx();drawTx()}
+  catch(e){if(e.data&&e.data.short){if(confirm(e.message+'\nต้องการบันทึกต่อหรือไม่?'))saveEditTx(id,true)}else alert(e.message)}
 }
 async function delTx(id){
   if(!confirm('ลบรายการนี้?'))return;
   try{await api('data',{action:'deleteTx',id});S.txs=S.txs.filter(t=>t.id!==id);drawTx()}catch(e){alert(e.message)}
 }
-
 function vItems(){
-  const types=[...new Set([...TYPES,...S.products.map(p=>p.type)])].map(t=>`<option value="${esc(t)}">`).join('');
+  const catOpts=CATEGORIES.map(c=>`<option value="${esc(c.label)}">`).join('');
   const form=canEdit()?`<form id="pf" onsubmit="saveProd(event)"><h2 id="pt">เพิ่มรายการสินค้า</h2>
   <input type="hidden" name="pid"><input type="hidden" name="image">
-  <label>ประเภท<input name="type" list="tl" required></label><datalist id="tl">${types}</datalist>
-  <label>แบบ<input name="model" placeholder="เช่น ปกขอบดำ, แบบ ก."></label>
-  <label>ไซซ์<input name="size" placeholder="เช่น XL ช (เว้นว่างได้)"></label>
+  <label>หมวดหมู่<select name="category" required onchange="fillGenderSize()"><option value="">— เลือกหมวด —</option>${catOpts}</select></label>
+  <label>เพศ<select name="gender" id="gSel"><option value="">— ไม่แยก —</option><option value="ชาย">ชาย</option><option value="หญิง">หญิง</option></select></label>
+  <label>ไซส์<select name="size" id="sSel"><option value="">— ไม่ระบุ —</option></select></label>
+  <label>แบบย่อย<input name="model" placeholder="เช่น ย่ามแบบ A, ตะแกรง"></label>
   <label>แจ้งเตือนเมื่อเหลือไม่เกิน<input name="min" type="number" min="0" value="0"></label>
   <label>รูปสินค้า<input type="file" accept="image/*" onchange="pickImg(this)"></label><div id="ip"></div>
   <button>บันทึก</button><button type="button" onclick="vItems()">ล้างฟอร์ม</button></form>`:'';
   $('#v').innerHTML=form+`<div class="bar"><input id="q" placeholder="ค้นหารายการสินค้า" oninput="drawItems()"></div><div id="r"></div>`;drawItems();
 }
+function fillGenderSize(){
+  const f=$('#pf');if(!f)return;
+  const c=CATEGORIES.find(x=>x.label===f.category.value);
+  const g=$('#gSel'),s=$('#sSel');
+  g.style.display=c&&c.genders.length?'':'none';
+  g.innerHTML='<option value="">— ไม่แยก —</option>'+(c?c.genders.map(g=>`<option value="${g}">${g}</option>`).join(''):'');
+  const sizes=c?(c.sizes||[]).concat(c.subs||[]):[];
+  s.innerHTML='<option value="">— ไม่ระบุ —</option>'+sizes.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+}
 function drawItems(){
   const q=($('#q')?.value||'').toLowerCase();
   const rows=S.products.filter(p=>pn(p).toLowerCase().includes(q)).sort((a,c)=>pn(a).localeCompare(pn(c),'th'))
-    .map(p=>[{h:img(p)},pn(p),p.min,canEdit()?{h:`<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')">ลบ</button>`}:'']);
-  $('#r').innerHTML=tbl(['','สินค้า','แจ้งเตือนที่',''],rows);
+    .map(p=>[{h:img(p)},pn(p),p.category||p.type,p.min,canEdit()?{h:`<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')">ลบ</button>`}:'']);
+  $('#r').innerHTML=tbl(['','สินค้า','หมวด','เตือนที่',''],rows);
 }
 async function pickImg(inp){
   const file=inp.files[0];if(!file)return;
@@ -179,20 +261,20 @@ async function pickImg(inp){
 }
 async function saveProd(ev){
   ev.preventDefault();const f=$('#pf');
-  const product={id:f.pid.value||undefined,type:f.type.value,model:f.model.value,size:f.size.value,min:f.min.value,image:f.image.value};
+  const product={id:f.pid.value||undefined,category:f.category.value,type:f.category.value,model:f.model.value,gender:f.gender.value,size:f.size.value,min:f.min.value,image:f.image.value};
   try{const d=await api('data',{action:'saveProduct',product});const i=S.products.findIndex(p=>p.id===d.product.id);if(i<0)S.products.push(d.product);else S.products[i]=d.product;vItems()}catch(e){alert(e.message)}
 }
 function editProd(id){
   const p=S.products.find(x=>x.id===id),f=$('#pf');if(!f)return;
-  f.pid.value=p.id;f.type.value=p.type;f.model.value=p.model||'';f.size.value=p.size||'';f.min.value=p.min||0;f.image.value=p.image||'';
+  f.pid.value=p.id;f.category.value=p.category||p.type;f.model.value=p.model||'';f.gender.value=p.gender||'';f.size.value=p.size||'';f.min.value=p.min||0;f.image.value=p.image||'';
+  fillGenderSize();f.gender.value=p.gender||'';f.size.value=p.size||'';
   $('#ip').innerHTML=p.image?`<img class="th" src="${esc(p.image)}" alt="">`:'';$('#pt').textContent='แก้ไขรายการสินค้า';scrollTo(0,0);
 }
 async function delProd(id){
   if(!confirm('ลบรายการสินค้านี้?'))return;
   try{await api('data',{action:'deleteProduct',id});S.products=S.products.filter(p=>p.id!==id);drawItems()}catch(e){alert(e.message)}
 }
-
-const KNOWN=['เสื้อกันฝน','หมวกนิรภัย','ตะแกรงครอบท่อไอเสีย','ย่ามนำจ่าย','แจ๊คเก็ต','เสื้อ'];
+const KNOWN=['เสื้อกันฝน','หมวกนิรภัย','ตะแกรง','ย่ามนำจ่าย','แจ๊คเก็ต','เสื้อ'];
 function parseCsv(t){
   t=t.replace(/^\ufeff/,'');const rows=[];let r=[],c='',q=false;
   for(let i=0;i<t.length;i++){const ch=t[i];
@@ -211,9 +293,9 @@ function guess(raw){
   if(m){size=m[1].toUpperCase();g=m[2]||'';s=s.slice(m[0].length).replace(/^\s*-\s*/,'').trim()}
   if(g)size+=' '+g;
   const k=KNOWN.find(x=>s.startsWith(x));
-  if(k)return{type:k,model:s.slice(k.length).replace(/^\s*-\s*/,'').trim(),size};
-  if(g)return{type:'เสื้อ',model:s,size};
-  const [t,...rest]=s.split(' ');return{type:t||'',model:rest.join(' '),size};
+  if(k)return{type:k,model:s.slice(k.length).replace(/^\s*-\s*/,'').trim(),size,gender:g};
+  if(g)return{type:'เสื้อ',model:s,size,gender:g};
+  const [t,...rest]=s.split(' ');return{type:t||'',model:rest.join(' '),size,gender:''};
 }
 function parseDate(v){
   v=String(v||'').trim();let y,m,d,x;
@@ -225,10 +307,9 @@ function parseDate(v){
   if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)return null;
   return dt.toISOString().slice(0,10);
 }
-
 let IM=null;
 function vImport(){
-  $('#v').innerHTML=`<h2>นำเข้าข้อมูลจากชีตเดิม</h2><p>ใน Google Sheets เปิดแท็บ Transaction แล้วเลือก ไฟล์ → ดาวน์โหลด → ค่าที่คั่นด้วยคอมมา (.csv) จากนั้นเลือกไฟล์ที่นี่ ระบบจะแสดงตัวอย่างให้ตรวจก่อนนำเข้าจริง (แถวแรกต้องเป็นหัวตาราง)</p><input type="file" accept=".csv,text/csv" onchange="readCsv(this)"><div id="r"></div>`;
+  $('#v').innerHTML=`<h2>นำเข้าข้อมูลจากชีตเดิม</h2><p>ใน Google Sheets เปิดแท็บ Transaction แล้วเลือก ไฟล์ → ดาวน์โหลด → ค่าที่คัดด้วยคอมมา (.csv) จากนั้นเลือกไฟล์ที่นี่ ระบบจะแสดงตัวอย่างให้ตรวจก่อนนำเข้าจริง (แถวแรกต้องเป็นหัวตาราง)</p><input type="file" accept=".csv,text/csv" onchange="readCsv(this)"><div id="r"></div>`;
 }
 async function readCsv(inp){
   const f=inp.files[0];if(!f)return;
@@ -251,24 +332,22 @@ async function readCsv(inp){
   drawImport();
 }
 function drawImport(){
-  const types=[...new Set([...TYPES,...S.products.map(p=>p.type)])].map(t=>`<option value="${esc(t)}">`).join('');
-  const inp=(i,f,v)=>({h:`<input data-i="${i}" data-f="${f}" value="${esc(v)}" list="tl2">`});
-  const rows=IM.keys.map((k,i)=>{const g=guess(k);return[k,IM.names[k],inp(i,'type',g.type),{h:`<input data-i="${i}" data-f="model" value="${esc(g.model)}">`},{h:`<input data-i="${i}" data-f="size" value="${esc(g.size)}">`}]});
+  const inp=(i,f,v)=>({h:`<input data-i="${i}" data-f="${f}" value="${esc(v)}">`});
+  const rows=IM.keys.map((k,i)=>{const g=guess(k);return[k,IM.names[k],inp(i,'type',g.type),inp(i,'model',g.model),inp(i,'size',g.size),inp(i,'gender',g.gender)]});
   $('#r').innerHTML=(IM.warn.length?`<h2>ข้อควรตรวจ (${IM.warn.length})</h2><ul>${IM.warn.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>`:'')+
-    `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2><p>แก้ประเภท/แบบ/ไซซ์ในช่องได้ ถ้าแก้ให้ตรงกันหลายแถว ระบบจะรวมเป็นสินค้าเดียว</p>`+
-    tbl(['ชื่อในชีต','จำนวนแถว','ประเภท','แบบ','ไซซ์'],rows)+`<datalist id="tl2">${types}</datalist><p><button class="p" onclick="runImport()">นำเข้าข้อมูล</button></p>`;
+    `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2><p>แก้ประเภท/แบบ/ไซส์/เพศในช่องได้ ถ้าแก้ให้ตรงกันหลายแถว ระบบจะรวมเป็นสินค้าเดียว</p>`+
+    tbl(['ชื่อในชีต','จำนวนแถว','หมวด','แบบ','ไซส์','เพศ'],rows)+`<p><button class="p" onclick="runImport()">นำเข้าข้อมูล</button></p>`;
 }
 async function runImport(force){
   const ps=IM.keys.map(k=>({key:k}));
   document.querySelectorAll('#r input[data-i]').forEach(el=>{ps[+el.dataset.i][el.dataset.f]=el.value.trim()});
-  const bad=ps.find(p=>!p.type);if(bad)return alert(`กรุณาระบุประเภทของ "${bad.key}"`);
+  const bad=ps.find(p=>!p.type);if(bad)return alert(`กรุณาระบุหมวดของ "${bad.key}"`);
   try{
-    const d=await api('data',{action:'bulkImport',products:ps,txs:IM.txs.map(({line,...t})=>t),force});
+    const d=await api('data',{action:'bulkImport',products:ps.map(p=>({key:p.key,category:p.type,type:p.type,model:p.model,size:p.size,gender:p.gender})),txs:IM.txs.map(({line,...t})=>t),force});
     alert(`นำเข้าแล้ว: รับ-จ่าย ${d.txs} รายการ (สินค้าในระบบรวม ${d.products} รายการ)`);
     IM=null;S.tab='report';await load();
   }catch(e){if(e.data&&e.data.exists){if(confirm(e.message+'\nต้องการนำเข้าต่อท้ายหรือไม่?'))runImport(true)}else alert(e.message)}
 }
-
 if(S.token)load();else render();
 </script>
 </body>
