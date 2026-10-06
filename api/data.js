@@ -5,6 +5,8 @@ const fail = (res, code, error, extra = {}) => res.status(code).json({ error, ..
 const str = (v, n = 200) => String(v || '').slice(0, n).trim();
 const name = (p) => [p.type, p.model, p.size].filter(Boolean).join(' ');
 const balance = (txs, id) => txs.reduce((n, t) => (t.productId === id ? n + (t.kind === 'in' ? t.qty : -t.qty) : n), 0);
+const validTx = (t, p, qty) =>
+  p && /^\d{4}-\d{2}-\d{2}$/.test(t.date) && ['in', 'out'].includes(t.kind) && Number.isInteger(qty) && qty >= 1;
 
 export default async function handler(req, res) {
   const role = getRole(req);
@@ -47,8 +49,7 @@ export default async function handler(req, res) {
     const t = body.tx || {};
     const qty = Number(t.qty);
     const p = products.find((x) => x.id === t.productId);
-    if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(t.date) || !['in', 'out'].includes(t.kind) || !Number.isInteger(qty) || qty < 1)
-      return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
+    if (!validTx(t, p, qty)) return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
     if (t.kind === 'out' && !body.force) {
       const have = balance(await redis.lrange('inv:tx', 0, -1), p.id);
       if (qty > have) return fail(res, 409, `ยอดคงเหลือไม่พอ (เหลือ ${have})`, { short: true });
@@ -63,24 +64,21 @@ export default async function handler(req, res) {
     const t = body.tx || {};
     const qty = Number(t.qty);
     const p = products.find((x) => x.id === t.productId);
-    if (!t.id || !p || !/^\d{4}-\d{2}-\d{2}$/.test(t.date) || !['in', 'out'].includes(t.kind) || !Number.isInteger(qty) || qty < 1)
-      return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
-
     const all = await redis.lrange('inv:tx', 0, -1);
     const idx = all.findIndex((x) => x.id === t.id);
-    if (idx < 0) return fail(res, 404, 'ไม่พบรายการที่ต้องการแก้ไข');
-
-    if (t.kind === 'out' && !body.force) {
-      const otherTxs = all.filter((x) => x.id !== t.id);
-      const have = balance(otherTxs, p.id);
-      if (qty > have) return fail(res, 409, `ยอดคงเหลือไม่พอ (เหลือ ${have})`, { short: true });
+    if (idx < 0) return fail(res, 404, 'ไม่พบรายการ');
+    if (!validTx(t, p, qty)) return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
+    const tx = { ...all[idx], date: t.date, kind: t.kind, productId: p.id, qty,
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), editedAt: Date.now() };
+    if (!body.force) {
+      const next = all.map((x, i) => (i === idx ? tx : x));
+      for (const id of new Set([all[idx].productId, p.id])) {
+        const left = balance(next, id);
+        if (left < 0) return fail(res, 409, `หลังแก้ไข ยอดคงเหลือจะติดลบ (${left})`, { short: true });
+      }
     }
-
-    const updated = { ...all[idx], date: t.date, kind: t.kind, productId: p.id, qty,
-      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300) };
-
-    await redis.lset('inv:tx', idx, updated);
-    return res.json({ tx: updated });
+    await redis.lset('inv:tx', idx, tx);
+    return res.json({ tx });
   }
 
   if (body.action === 'deleteTx') {
