@@ -54,7 +54,7 @@ tr.tx-in { background-color: #f4faf6; }
 tr.tx-out { background-color: #fdf5f3; }
 
 /* Forms & Controls */
-form { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; align-items: end; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+form { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; align-items: end; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 20px; }
 form h2 { grid-column: 1 / -1; margin: 0 0 4px 0; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid #aab4be; border-radius: 6px; background: #fff; min-height: 38px; }
@@ -81,7 +81,7 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 /* Login Modal Styling */
 .login-wrap { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: 20px; }
 .login { width: 100%; max-width: 460px; background: #fff; border-radius: 12px; padding: 36px 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid var(--line); }
-.login form { display: flex; flex-direction: column; gap: 18px; border: none; padding: 0; box-shadow: none; }
+.login form { display: flex; flex-direction: column; gap: 18px; border: none; padding: 0; box-shadow: none; margin-bottom: 0; }
 .login h2 { font-size: 24px; text-align: center; color: var(--navy); margin-bottom: 8px; font-weight: 700; }
 .login label { font-size: 15px; font-weight: 600; }
 .login input[type=password] { font-size: 20px; padding: 12px 16px; min-height: 52px; letter-spacing: 3px; border-radius: 8px; border: 2px solid #cbd5e1; }
@@ -308,7 +308,7 @@ function exportCsv() {
   a.download = 'สินค้าคงเหลือ_' + today() + '.csv'; a.click();
 }
 
-/* 2. Transaction View */
+/* 2. Transaction View (เรียงจาก วันเก่า -> วันใหม่) */
 function vTx() {
   const prodOptions = S.products.map(p => `<option value="${esc(pn(p))}">`).join('');
   const editingTx = S.editingTxId ? S.txs.find(t => t.id === S.editingTxId) : null;
@@ -358,9 +358,10 @@ function drawTx() {
   const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
   const q = ($('#q')?.value || '').toLowerCase();
   
+  // เรียงลำดับตามวันที่จากวันเก่าไปวันใหม่ (a.t.date -> c.t.date)
   const all = S.txs.map(t => ({ t, name: byId[t.productId] ? pn(byId[t.productId]) : '(สินค้าถูกลบ)' }))
     .filter(({ t, name }) => [name, t.docNo, t.party, t.note].join(' ').toLowerCase().includes(q))
-    .sort((a, c) => c.t.date.localeCompare(a.t.date) || c.t.at - a.t.at);
+    .sort((a, c) => a.t.date.localeCompare(c.t.date) || a.t.at - c.t.at);
 
   const rows = all.slice(0, 300).map(({ t, name }) => {
     const isIn = t.kind === 'in';
@@ -438,14 +439,14 @@ async function delTx(id) {
   } catch (e) { alert(e.message); }
 }
 
-/* 3. Items Management View */
+/* 3. Items Management View (สามารถเพิ่ม/แก้ไขรายการสินค้าได้) */
 function vItems() {
   const catOpts = CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   const specOpts = SIZE_MODEL_OPTIONS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
 
   const form = canEdit() ? `
     <form id="pf" onsubmit="saveProd(event)">
-      <h2 id="pt">➕ เพิ่มรายการสินค้า</h2>
+      <h2 id="pt">➕ เพิ่มรายการสินค้าใหม่</h2>
       <input type="hidden" name="pid">
       <input type="hidden" name="image">
 
@@ -461,14 +462,14 @@ function vItems() {
         <input name="min" type="number" min="0" value="0">
       </label>
 
-      <label>รูปสินค้า
+      <label>รูปสินค้า (ถ้ามี)
         <input type="file" accept="image/*" onchange="pickImg(this)">
       </label>
 
       <div id="ip"></div>
       
       <div style="display:flex;gap:8px;grid-column:1/-1;">
-        <button type="submit" class="p" style="flex:1;">บันทึกสินค้า</button>
+        <button type="submit" class="p" style="flex:1;">บันทึกรายการสินค้า</button>
         <button type="button" onclick="vItems()">ล้างฟอร์ม</button>
       </div>
     </form>` : '';
@@ -550,7 +551,7 @@ async function delProd(id) {
   } catch (e) { alert(e.message); }
 }
 
-/* 4. CSV Import & Smart Category Guesser */
+/* 4. CSV Import & Smart Category Guesser (ปรับปรุงการแยก "ชาย / หญิง / ญ") */
 function parseCsv(t) {
   t = t.replace(/^\ufeff/, ''); const rows = []; let r = [], c = '', q = false;
   for (let i = 0; i < t.length; i++) {
@@ -571,9 +572,13 @@ function guess(raw) {
   let s = cleanName(raw);
   let type = '', spec = '';
 
+  // ตรวจจับ ชาย / หญิง ให้ครอบคลุม ตัวอักษร "ญ" และ "ช"
   let gender = '';
-  if (/ชาย|\bช\b/i.test(s)) gender = 'ชาย';
-  else if (/หญิง|\bญ\b/i.test(s)) gender = 'หญิง';
+  if (/(?:^|\s|[\(\_])(?:หญิง\vert{}ญ\vert{}ญ\.)(?:$\vert{}\s\vert{}[\)\_])/i.test(s) || s.includes('หญิง') || s.includes(' ญ')) {
+    gender = 'หญิง';
+  } else if (/(?:^|\s|[\(\_])(?:ชาย\vert{}ช\vert{}ช\.)(?:$\vert{}\s\vert{}[\)\_])/i.test(s) || s.includes('ชาย') || s.includes(' ช')) {
+    gender = 'ชาย';
+  }
 
   const sizeMatch = /((?:\d{1,2})?XL|XS|S|M|L)\b/i.exec(s);
   if (sizeMatch) {
