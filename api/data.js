@@ -3,7 +3,7 @@ import { redis, getRole } from './_lib.js';
 
 const fail = (res, code, error, extra = {}) => res.status(code).json({ error, ...extra });
 const str = (v, n = 200) => String(v || '').slice(0, n).trim();
-const name = (p) => [p.type, p.model, p.size].filter(Boolean).join(' ');
+const name = (p) => [p.category || p.type, p.model, p.size].filter(Boolean).join(' ');
 const balance = (txs, id) => txs.reduce((n, t) => (t.productId === id ? n + (t.kind === 'in' ? t.qty : -t.qty) : n), 0);
 
 export default async function handler(req, res) {
@@ -24,11 +24,15 @@ export default async function handler(req, res) {
     const p = body.product || {};
     const clean = {
       id: p.id || randomUUID(),
-      type: str(p.type, 60), model: str(p.model, 80), size: str(p.size, 40),
+      category: str(p.category || p.type, 80),
+      type: str(p.type || p.category, 80),
+      model: str(p.model, 80),
+      gender: str(p.gender, 10),
+      size: str(p.size, 40),
       min: Math.max(0, parseInt(p.min) || 0),
       image: typeof p.image === 'string' && p.image.startsWith('https://') ? p.image : '',
     };
-    if (!clean.type) return fail(res, 400, 'กรุณาระบุประเภทสินค้า');
+    if (!clean.category) return fail(res, 400, 'กรุณาระบุประเภทสินค้า');
     if (products.some((x) => x.id !== clean.id && name(x) === name(clean))) return fail(res, 409, 'มีรายการนี้อยู่แล้ว');
     const i = products.findIndex((x) => x.id === clean.id);
     if (i < 0) products.push(clean); else products[i] = clean;
@@ -59,6 +63,29 @@ export default async function handler(req, res) {
     return res.json({ tx });
   }
 
+  if (body.action === 'updateTx') {
+    const t = body.tx || {};
+    const all = await redis.lrange('inv:tx', 0, -1);
+    const idx = all.findIndex((x) => x.id === body.id);
+    if (idx < 0) return fail(res, 404, 'ไม่พบรายการ');
+    const qty = Number(t.qty);
+    const p = products.find((x) => x.id === t.productId);
+    if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(t.date) || !['in', 'out'].includes(t.kind) || !Number.isInteger(qty) || qty < 1)
+      return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
+    if (t.kind === 'out' && !body.force) {
+      const old = all[idx];
+      const have = balance(all.filter((x) => x.id !== old.id), p.id);
+      if (qty > have) return fail(res, 409, `ยอดคงเหลือไม่พอ (เหลือ ${have})`, { short: true });
+    }
+    const updated = { ...all[idx], date: t.date, kind: t.kind, productId: p.id, qty,
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300) };
+    all[idx] = updated;
+    const newKey = 'inv:tx';
+    await redis.del(newKey);
+    for (let i = 0; i < all.length; i += 500) await redis.rpush(newKey, ...all.slice(i, i + 500));
+    return res.json({ tx: updated });
+  }
+
   if (body.action === 'deleteTx') {
     const all = await redis.lrange('inv:tx', 0, -1);
     const found = all.find((t) => t.id === body.id);
@@ -75,8 +102,9 @@ export default async function handler(req, res) {
     const byName = new Map(products.map((p) => [name(p), p]));
     const idByKey = {};
     for (const x of inP) {
-      const c = { type: str(x.type, 60), model: str(x.model, 80), size: str(x.size, 40) };
-      if (!c.type) return fail(res, 400, `สินค้า "${str(x.key)}" ยังไม่ระบุประเภท`);
+      const c = { category: str(x.category || x.type, 80), type: str(x.type || x.category, 80),
+        model: str(x.model, 80), gender: str(x.gender, 10), size: str(x.size, 40) };
+      if (!c.category) return fail(res, 400, `สินค้า "${str(x.key)}" ยังไม่ระบุประเภท`);
       let p = byName.get(name(c));
       if (!p) { p = { id: randomUUID(), ...c, min: 0, image: '' }; products.push(p); byName.set(name(c), p); }
       idByKey[x.key] = p.id;
