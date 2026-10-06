@@ -67,5 +67,32 @@ export default async function handler(req, res) {
     return res.json({ ok: true });
   }
 
+  if (body.action === 'bulkImport') {
+    const existing = await redis.lrange('inv:tx', 0, -1);
+    if (existing.length && !body.force) return fail(res, 409, 'ในระบบมีรายการรับ-จ่ายอยู่แล้ว', { exists: true });
+    const inP = Array.isArray(body.products) ? body.products.slice(0, 2000) : [];
+    const inTx = Array.isArray(body.txs) ? body.txs.slice(0, 20000) : [];
+    const byName = new Map(products.map((p) => [name(p), p]));
+    const idByKey = {};
+    for (const x of inP) {
+      const c = { type: str(x.type, 60), model: str(x.model, 80), size: str(x.size, 40) };
+      if (!c.type) return fail(res, 400, `สินค้า "${str(x.key)}" ยังไม่ระบุประเภท`);
+      let p = byName.get(name(c));
+      if (!p) { p = { id: randomUUID(), ...c, min: 0, image: '' }; products.push(p); byName.set(name(c), p); }
+      idByKey[x.key] = p.id;
+    }
+    const rows = [];
+    for (const t of inTx) {
+      const qty = Number(t.qty), pid = idByKey[t.key];
+      if (!pid || !/^\d{4}-\d{2}-\d{2}$/.test(t.date) || !['in', 'out'].includes(t.kind) || !Number.isInteger(qty) || qty < 1)
+        return fail(res, 400, 'ข้อมูลบางแถวไม่ถูกต้อง');
+      rows.push({ id: randomUUID(), date: t.date, kind: t.kind, productId: pid, qty,
+        docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), at: Date.now() });
+    }
+    await redis.set('inv:products', products);
+    for (let i = 0; i < rows.length; i += 500) await redis.rpush('inv:tx', ...rows.slice(i, i + 500));
+    return res.json({ products: products.length, txs: rows.length });
+  }
+
   return fail(res, 400, 'คำสั่งไม่ถูกต้อง');
 }
