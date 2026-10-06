@@ -107,7 +107,6 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// 13 หมวดหมู่หลักตามโจทย์ใหม่
 const CATEGORIES = [
   'เสื้อปกแถบดำ ชาย',
   'เสื้อปกแถบดำ หญิง',
@@ -161,9 +160,13 @@ function bal() {
 
 function tbl(heads, rows) {
   return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
-    rows.map(r => `<tr class="${r.cls \vert{}\vert{} ''}">${
-      r.map(c => c && typeof c === 'object' ? `<td class="${c.c || ''}">${c.h}</td>` : `<td class="${typeof c === 'number' ? 'num' : ''}">${esc(c)}</td>`).join('')
-    }</tr>`).join('') || `<tr><td colspan="${heads.length}" style="text-align:center;color:#64748b;padding:16px;">ไม่มีข้อมูล</td></tr>`
+    rows.map(r => {
+      const cls = r.cls || '';
+      const cells = Array.isArray(r) ? r : r.data;
+      return `<tr class="${cls}">${
+        cells.map(c => c && typeof c === 'object' ? `<td class="${c.c || ''}">${c.h}</td>` : `<td class="${typeof c === 'number' ? 'num' : ''}">${esc(c)}</td>`).join('')
+      }</tr>`;
+    }).join('') || `<tr><td colspan="${heads.length}" style="text-align:center;color:#64748b;padding:16px;">ไม่มีข้อมูล</td></tr>`
   }</tbody></table></div>`;
 }
 
@@ -239,7 +242,8 @@ function render() {
     </header>
     <main id="v"></main>`;
 
-  ({ summary: vSummary, report: vReport, tx: vTx, items: vItems, import: vImport })[S.tab]();
+  const views = { summary: vSummary, report: vReport, tx: vTx, items: vItems, import: vImport };
+  if (views[S.tab]) views[S.tab]();
 }
 
 function go(t) { S.tab = t; S.editingTxId = null; render(); }
@@ -324,7 +328,7 @@ function vSummary() {
     </div>`;
 }
 
-/* 2. Inventory View (กล่องๆ แยกตามประเภท) */
+/* 2. Inventory View */
 function vReport() {
   $('#v').innerHTML = `
     <div class="bar">
@@ -365,7 +369,7 @@ function drawReport() {
     html += `
       <div class="cat-card">
         <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">${prods.length} รายการ</span></h3>
-        ${tbl(['รูป', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], rows.map(r => { const arr = r.data; arr.cls = r.cls; return arr; }))}
+        ${tbl(['รูป', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], rows)}
       </div>`;
   });
 
@@ -383,7 +387,7 @@ function exportCsv() {
   a.download = 'สินค้าคงเหลือ_' + today() + '.csv'; a.click();
 }
 
-/* 3. Transaction View (รับเข้า/จ่ายออก) */
+/* 3. Transaction View */
 function vTx() {
   const prodOptions = S.products.map(p => `<option value="${esc(pn(p))}">`).join('');
   const editingTx = S.editingTxId ? S.txs.find(t => t.id === S.editingTxId) : null;
@@ -451,7 +455,7 @@ function drawTx() {
     };
   });
 
-  $('#r').innerHTML = tbl(['วันที่', 'ประเภท', 'สินค้า', 'จำนวน', 'เลขที่ส่งของ', 'ผู้ส่ง/ผู้รับ', 'หมายเหตุ', 'จัดการ'], rows.map(r => { const a = r.data; a.cls = r.cls; return a; })) +
+  $('#r').innerHTML = tbl(['วันที่', 'ประเภท', 'สินค้า', 'จำนวน', 'เลขที่ส่งของ', 'ผู้ส่ง/ผู้รับ', 'หมายเหตุ', 'จัดการ'], rows) +
     (all.length > 300 ? `<p style="font-size:13px;color:#64748b;">แสดง 300 จาก ${all.length} รายการ ใช้ช่องค้นหาเพื่อกรองเพิ่ม</p>` : '');
 }
 
@@ -647,23 +651,19 @@ function parseCsv(t) {
 
 function cleanName(s) { return String(s || '').replace(/\\/g, '').replace(/\s+/g, ' ').trim(); }
 
-// ระบบแกะข้อมูลจากชื่อสินค้าใน CSV เพื่อจำแนกประเภท 13 หมวดให้อัตโนมัติ
 function guess(raw) {
   let s = cleanName(raw);
   let type = '', model = '', size = '';
 
-  // 1. หาเพศ (ชาย / หญิง / ช / ญ)
   let gender = '';
   if (/ชาย|\bช\b/i.test(s)) gender = 'ชาย';
   else if (/หญิง|\bญ\b/i.test(s)) gender = 'หญิง';
 
-  // 2. หาขนาด Size (S, M, L, XL, 2XL, 3XL, 10XL, 11XL ฯลฯ)
   const sizeMatch = /((?:\d{1,2})?XL|XS|S|M|L)\b/i.exec(s);
   if (sizeMatch) {
     size = sizeMatch[1].toUpperCase();
   }
 
-  // 3. จำแนกประเภท
   if (s.includes('หมวกนิรภัย') || s.includes('หมวก')) {
     type = 'หมวกนิรภัย';
   } else if (s.includes('เสื้อกันฝน') || s.includes('กันฝน')) {
@@ -691,7 +691,6 @@ function guess(raw) {
   } else if (s.includes('แถบดำ') || s.includes('ปกดำ')) {
     type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
   } else {
-    // ถ้าไม่เข้าเงื่อนไข ให้ใช้หมวดเสื้อตามเพศ หรือหมวดแรก
     type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
   }
 
