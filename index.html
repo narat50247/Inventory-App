@@ -89,6 +89,12 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .login button { font-size: 18px; font-weight: 600; padding: 12px; min-height: 52px; border-radius: 8px; background: var(--navy); color: #fff; margin-top: 8px; border: 0; cursor: pointer; }
 .err { color: var(--danger); font-size: 14px; text-align: center; min-height: 1.4em; }
 
+[hidden] { display: none !important; }
+th .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th .sortable:hover { color: var(--navy); text-decoration: underline; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; font-size: 14px; }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager select { min-height: 32px; padding: 4px 8px; }
 :focus-visible { outline: 2px solid var(--out); outline-offset: 1px; }
 </style>
 </head>
@@ -135,7 +141,10 @@ const S = {
   tab: 'report',
   products: [],
   txs: [],
-  editingTxId: null
+  editingTxId: null,
+  txSort: { k: 'date', dir: -1 },
+  txPage: 1,
+  txSize: 50
 };
 
 const canEdit = () => S.role === 'editor';
@@ -148,7 +157,19 @@ const getItemSpec = p => {
   return (spec === 'ไม่ระบุ / -' || spec === 'ทั่วไป / ไม่ระบุ') ? '' : spec;
 };
 
-const pn = p => [p.type, getItemSpec(p)].filter(Boolean).join(' ');
+const pn = p => p ? [p.type, getItemSpec(p)].filter(Boolean).join(' ') : '';
+
+// ลำดับไซซ์: XS S M L XL 2XL 3XL ... แล้วตามด้วย ฟรีไซซ์ และ "แบบ" อื่นๆ
+const specRank = s => {
+  s = String(s || '').trim().toUpperCase();
+  if (s === 'XS') return 0; if (s === 'S') return 1; if (s === 'M') return 2; if (s === 'L') return 3;
+  const m = /^(\d{0,2})XL$/.exec(s); if (m) return 3 + (+m[1] || 1);
+  if (s.startsWith('ฟรีไซซ์')) return 100;
+  return 200;
+};
+const bySpec = (a, c) => specRank(getItemSpec(a)) - specRank(getItemSpec(c)) || getItemSpec(a).localeCompare(getItemSpec(c), 'th', { numeric: true });
+const allTypes = () => [...new Set([...CATEGORIES, ...S.products.map(p => p.type).filter(Boolean)])];
+const allSpecs = () => [...new Set([...SIZE_MODEL_OPTIONS, ...S.products.map(p => getItemSpec(p)).filter(Boolean)])];
 const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const img = p => p && p.image ? `<img class="th" src="${esc(p.image)}" loading="lazy" alt="">` : '<span class="th"></span>';
 
@@ -159,7 +180,7 @@ function bal() {
 }
 
 function tbl(heads, rows) {
-  return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
+  return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${h && typeof h === 'object' ? h.h : esc(h)}</th>`).join('')}</tr></thead><tbody>${
     rows.map(r => {
       const cls = r.cls || '';
       const cells = Array.isArray(r) ? r : r.data;
@@ -268,7 +289,7 @@ function drawReport() {
 
   let hasData = false;
   allCats.forEach(cat => {
-    const prods = filtered.filter(p => p.type === cat);
+    const prods = filtered.filter(p => p.type === cat).sort(bySpec);
     if (prods.length === 0) return;
     hasData = true;
 
@@ -278,7 +299,8 @@ function drawReport() {
       catTotal += n;
       let statusHtml = `<b>${n}</b>`;
       let cls = '';
-      if (n <= 0) { statusHtml = `<span class="badge badge-zero">หมด (0)</span>`; cls = 'zerorow'; }
+      if (n < 0) { statusHtml = `<span class="badge badge-zero">ติดลบ (${n})</span>`; cls = 'zerorow'; }
+      else if (n === 0) { statusHtml = `<span class="badge badge-zero">หมด (0)</span>`; cls = 'zerorow'; }
       else if (p.min > 0 && n <= p.min) { statusHtml = `<b class="low">${n}</b>`; cls = 'lowrow'; }
       
       return {
@@ -342,7 +364,7 @@ function vTx() {
       </div>
     </form>` : '';
 
-  $('#v').innerHTML = form + `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="drawTx()"></div><div id="r"></div>`;
+  $('#v').innerHTML = form + `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()"></div><div id="r"></div>`;
   drawTx();
 }
 
@@ -354,31 +376,56 @@ function selectKind(k) {
   if (rad) rad.checked = true;
 }
 
+const TX_COLS = [['date', 'วันที่'], ['kind', 'ประเภท'], ['name', 'สินค้า'], ['qty', 'จำนวน'], ['docNo', 'เลขที่ส่งของ'], ['party', 'ผู้ส่ง/ผู้รับ'], ['note', 'หมายเหตุ']];
+
+function sortTx(k) {
+  S.txSort = S.txSort.k === k ? { k, dir: -S.txSort.dir } : { k, dir: (k === 'date' || k === 'qty') ? -1 : 1 };
+  S.txPage = 1; drawTx();
+}
+function txGo(p) { S.txPage = p; drawTx(); }
+function txSize(n) { S.txSize = +n; S.txPage = 1; drawTx(); }
+
 function drawTx() {
   const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
   const q = ($('#q')?.value || '').toLowerCase();
-  
-  // เรียงลำดับตามวันที่จากวันเก่าไปวันใหม่ (a.t.date -> c.t.date)
+  const { k, dir } = S.txSort;
+  const val = x => k === 'qty' ? x.t.qty : k === 'name' ? x.name : k === 'date' ? x.t.date : String(x.t[k] || '');
+
+  // ค่าเริ่มต้น: วันที่ล่าสุดขึ้นก่อน
   const all = S.txs.map(t => ({ t, name: byId[t.productId] ? pn(byId[t.productId]) : '(สินค้าถูกลบ)' }))
     .filter(({ t, name }) => [name, t.docNo, t.party, t.note].join(' ').toLowerCase().includes(q))
-    .sort((a, c) => a.t.date.localeCompare(c.t.date) || a.t.at - c.t.at);
+    .sort((a, c) => {
+      const x = val(a), y = val(c);
+      const r = typeof x === 'number' ? x - y : x.localeCompare(y, 'th', { numeric: true });
+      return (r || a.t.date.localeCompare(c.t.date) || (a.t.at || 0) - (c.t.at || 0)) * dir;
+    });
 
-  const rows = all.slice(0, 300).map(({ t, name }) => {
+  const size = S.txSize || all.length || 1;
+  const pages = Math.max(1, Math.ceil(all.length / size));
+  S.txPage = Math.min(Math.max(1, S.txPage), pages);
+  const slice = S.txSize ? all.slice((S.txPage - 1) * size, S.txPage * size) : all;
+
+  const rows = slice.map(({ t, name }) => {
     const isIn = t.kind === 'in';
     const badgeHtml = `<span class="badge ${isIn ? 'badge-in' : 'badge-out'}">${isIn ? '📥 รับเข้า' : '📤 จ่ายออก'}</span>`;
-    
     const actions = canEdit() ? {
       h: `<button class="s" onclick="editTx('${t.id}')">แก้ไข</button> <button class="s" onclick="delTx('${t.id}')" style="color:var(--danger)">ลบ</button>`
     } : '';
-
-    return {
-      cls: isIn ? 'tx-in' : 'tx-out',
-      data: [thDate(t.date), { h: badgeHtml }, name, t.qty, t.docNo || '-', t.party || '-', t.note || '-', actions]
-    };
+    return { cls: isIn ? 'tx-in' : 'tx-out', data: [thDate(t.date), { h: badgeHtml }, name, t.qty, t.docNo || '-', t.party || '-', t.note || '-', actions] };
   });
 
-  $('#r').innerHTML = tbl(['วันที่', 'ประเภท', 'สินค้า', 'จำนวน', 'เลขที่ส่งของ', 'ผู้ส่ง/ผู้รับ', 'หมายเหตุ', 'จัดการ'], rows) +
-    (all.length > 300 ? `<p style="font-size:13px;color:#64748b;">แสดง 300 จาก ${all.length} รายการ ใช้ช่องค้นหาเพื่อกรองเพิ่ม</p>` : '');
+  const heads = [...TX_COLS.map(([key, label]) => ({
+    h: `<span class="sortable" onclick="sortTx('${key}')">${label}${k === key ? (dir > 0 ? ' ▲' : ' ▼') : ' <span style="opacity:.3">↕</span>'}</span>`
+  })), 'จัดการ'];
+
+  const pager = `<div class="pager"><span>ทั้งหมด ${all.length} รายการ</span>
+    <span><button class="s" ${S.txPage <= 1 ? 'disabled' : ''} onclick="txGo(${S.txPage - 1})">‹ ก่อนหน้า</button>
+    &nbsp;หน้า ${S.txPage} / ${pages}&nbsp;
+    <button class="s" ${S.txPage >= pages ? 'disabled' : ''} onclick="txGo(${S.txPage + 1})">ถัดไป ›</button></span>
+    <label style="flex-direction:row;align-items:center;gap:6px">แสดงหน้าละ
+      <select onchange="txSize(this.value)">${[25, 50, 100, 0].map(n => `<option value="${n}" ${S.txSize === n ? 'selected' : ''}>${n || 'ทั้งหมด'}</option>`).join('')}</select></label></div>`;
+
+  $('#r').innerHTML = pager + tbl(heads, rows) + pager;
 }
 
 function editTx(id) {
@@ -419,7 +466,7 @@ async function saveTx(ev, force) {
       const idx = S.txs.findIndex(t => t.id === tx.id);
       if (idx >= 0) S.txs[idx] = d.tx;
     } else {
-      S.txs.push(d.tx);
+      S.txs.push(d.tx); S.txPage = 1;
     }
     S.editingTxId = null;
     vTx();
@@ -440,9 +487,19 @@ async function delTx(id) {
 }
 
 /* 3. Items Management View (สามารถเพิ่ม/แก้ไขรายการสินค้าได้) */
+function toggleNew(sel) {
+  const i = sel.parentElement.querySelector('.new-in');
+  i.hidden = sel.value !== '__new';
+  if (!i.hidden) i.focus();
+}
+
 function vItems() {
-  const catOpts = CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  const specOpts = SIZE_MODEL_OPTIONS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  const catOpts = allTypes().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('') + '<option value="__new">➕ เพิ่มประเภทใหม่...</option>';
+  const o = s => `<option value="${esc(s)}">${esc(s)}</option>`;
+  const specs = allSpecs().filter(s => s !== 'ไม่ระบุ / -');
+  const specOpts = `<optgroup label="ไซซ์">${specs.filter(s => specRank(s) < 200).sort((a, c) => specRank(a) - specRank(c)).map(o).join('')}</optgroup>` +
+    `<optgroup label="แบบ">${specs.filter(s => specRank(s) >= 200).sort((a, c) => a.localeCompare(c, 'th')).map(o).join('')}</optgroup>` +
+    `<option value="ไม่ระบุ / -">ไม่ระบุ / -</option><option value="__new">➕ เพิ่มไซซ์ / แบบใหม่...</option>`;
 
   const form = canEdit() ? `
     <form id="pf" onsubmit="saveProd(event)">
@@ -451,11 +508,13 @@ function vItems() {
       <input type="hidden" name="image">
 
       <label>ประเภทสินค้า
-        <select name="type" required>${catOpts}</select>
+        <select name="type" required onchange="toggleNew(this)">${catOpts}</select>
+        <input name="newType" class="new-in" placeholder="พิมพ์ชื่อประเภทใหม่ เช่น เสื้อ 67 ชาย" hidden>
       </label>
 
       <label>SIZE / แบบ
-        <select name="spec">${specOpts}</select>
+        <select name="spec" onchange="toggleNew(this)">${specOpts}</select>
+        <input name="newSpec" class="new-in" placeholder="พิมพ์ไซซ์หรือแบบใหม่ เช่น 6XL" hidden>
       </label>
 
       <label>แจ้งเตือนเมื่อเหลือไม่เกิน
@@ -467,7 +526,7 @@ function vItems() {
       </label>
 
       <div id="ip"></div>
-      
+
       <div style="display:flex;gap:8px;grid-column:1/-1;">
         <button type="submit" class="p" style="flex:1;">บันทึกรายการสินค้า</button>
         <button type="button" onclick="vItems()">ล้างฟอร์ม</button>
@@ -479,9 +538,9 @@ function vItems() {
 }
 
 function drawItems() {
-  const q = ($('#q')?.value || '').toLowerCase();
+  const q = ($('#q')?.value || '').toLowerCase(), order = allTypes();
   const rows = S.products.filter(p => pn(p).toLowerCase().includes(q))
-    .sort((a, c) => pn(a).localeCompare(pn(c), 'th'))
+    .sort((a, c) => order.indexOf(a.type) - order.indexOf(c.type) || bySpec(a, c))
     .map(p => [
       { h: img(p) },
       p.type,
@@ -489,7 +548,6 @@ function drawItems() {
       p.min,
       canEdit() ? { h: `<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')" style="color:var(--danger)">ลบ</button>` } : ''
     ]);
-
   $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'SIZE / แบบ', 'แจ้งเตือนที่', 'จัดการ'], rows);
 }
 
@@ -509,17 +567,13 @@ async function pickImg(inp) {
 async function saveProd(ev) {
   ev.preventDefault();
   const f = $('#pf');
-  const specVal = f.spec.value;
-  
-  const product = {
-    id: f.pid.value || undefined,
-    type: f.type.value,
-    size: specVal,
-    model: specVal,
-    min: f.min.value,
-    image: f.image.value
-  };
+  const type = (f.type.value === '__new' ? f.newType.value : f.type.value).trim();
+  let spec = (f.spec.value === '__new' ? f.newSpec.value : f.spec.value).trim();
+  if (!type) return alert('กรุณาพิมพ์ชื่อประเภทสินค้าใหม่');
+  if (!spec) return alert('กรุณาพิมพ์ไซซ์หรือแบบใหม่');
+  if (specRank(spec) < 100) spec = spec.toUpperCase();
 
+  const product = { id: f.pid.value || undefined, type, size: spec, model: spec, min: f.min.value, image: f.image.value };
   try {
     const d = await api('data', { action: 'saveProduct', product });
     const i = S.products.findIndex(p => p.id === d.product.id);
@@ -569,56 +623,35 @@ function parseCsv(t) {
 function cleanName(s) { return String(s || '').replace(/\\/g, '').replace(/\s+/g, ' ').trim(); }
 
 function guess(raw) {
-  let s = cleanName(raw);
+  const s = cleanName(raw);
   let type = '', spec = '';
+  const gender = /(?:^|[\s(])(?:หญิง|ญ)(?=$|[\s).,-])/.test(s) ? 'หญิง'
+    : /(?:^|[\s(])(?:ชาย|ช)(?=$|[\s).,-])/.test(s) ? 'ชาย' : '';
+  const shirt = base => gender ? `${base} ${gender}` : '';   // ไม่รู้เพศ -> ให้เลือกเอง
 
-  // ตรวจจับ ชาย / หญิง ให้ครอบคลุม ตัวอักษร "ญ" และ "ช"
-  let gender = '';
-  if (/(?:^|\s|[\(\_])(?:หญิง\vert{}ญ\vert{}ญ\.)(?:$\vert{}\s\vert{}[\)\_])/i.test(s) || s.includes('หญิง') || s.includes(' ญ')) {
-    gender = 'หญิง';
-  } else if (/(?:^|\s|[\(\_])(?:ชาย\vert{}ช\vert{}ช\.)(?:$\vert{}\s\vert{}[\)\_])/i.test(s) || s.includes('ชาย') || s.includes(' ช')) {
-    gender = 'ชาย';
-  }
+  const sm = /(?:^|[\s(])((?:\d{1,2})?XL|XS|S|M|L)(?=$|[\s).,-])/i.exec(s);
+  if (sm) spec = sm[1].toUpperCase();
 
-  const sizeMatch = /((?:\d{1,2})?XL|XS|S|M|L)\b/i.exec(s);
-  if (sizeMatch) {
-    spec = sizeMatch[1].toUpperCase();
-  }
-
-  if (s.includes('หมวกนิรภัย') || s.includes('หมวก')) {
-    type = 'หมวกนิรภัย';
-  } else if (s.includes('เสื้อกันฝน') || s.includes('กันฝน')) {
-    type = 'เสื้อกันฝน';
-  } else if (s.includes('ดำ-แดง') || s.includes('ดำแดง')) {
-    type = 'เสื้อแจ๊คเก็ต ดำ-แดง';
-  } else if (s.includes('ปฏิบัติการ') || s.includes('ปฏิบัติ')) {
-    type = 'เสื้อแจ๊คเก็ต ปฏิบัติการ';
-  } else if (s.includes('ย่าม') || s.includes('ตะแกรง') || s.includes('ฝาครอบ') || s.includes('ตาข่าย') || s.includes('ทรงสูง')) {
+  if (s.includes('หมวก')) type = 'หมวกนิรภัย';
+  else if (s.includes('กันฝน')) type = 'เสื้อกันฝน';
+  else if (s.includes('ดำ-แดง') || s.includes('ดำแดง')) type = 'เสื้อแจ๊คเก็ต ดำ-แดง';
+  else if (s.includes('ปฏิบัติ')) type = 'เสื้อแจ๊คเก็ต ปฏิบัติการ';
+  else if (s.includes('ย่าม') || s.includes('ตะแกรง') || s.includes('ฝาครอบ') || s.includes('ตาข่าย') || s.includes('ทรงสูง')) {
     type = 'ย่ามนำจ่าย และ อุปกรณ์';
-    if (s.includes('แบบ ก.') && s.includes('66')) spec = 'ย่ามนำจ่าย "แบบ ก. - ปี 66"';
-    else if (s.includes('ฝาครอบ') && s.includes('66')) spec = 'ย่ามนำจ่าย "ฝาครอบ - ปี 66"';
-    else if (s.includes('ตาข่าย') && s.includes('66')) spec = 'ย่ามนำจ่าย "ตาข่าย - ปี 66"';
-    else if (s.includes('แบบ ก.')) spec = 'ย่ามนำจ่าย "แบบ ก."';
-    else if (s.includes('ฝาครอบ')) spec = 'ย่ามนำจ่าย "ฝาครอบ"';
-    else if (s.includes('ตาข่าย')) spec = 'ย่ามนำจ่าย "ตาข่าย"';
+    const y66 = s.includes('66') ? ' - ปี 66' : '';
+    if (s.includes('แบบ ก.')) spec = `ย่ามนำจ่าย "แบบ ก.${y66}"`;
+    else if (s.includes('ฝาครอบ')) spec = `ย่ามนำจ่าย "ฝาครอบ${y66}"`;
+    else if (s.includes('ตาข่าย')) spec = `ย่ามนำจ่าย "ตาข่าย${y66}"`;
     else if (s.includes('ทรงสูง')) spec = 'ย่ามนำจ่าย "ทรงสูง"';
     else if (s.includes('สะพาย')) spec = 'ย่ามสะพาย';
     else if (s.includes('ตะแกรง')) spec = 'ตะแกรงครอบท่อไอเสีย';
-  } else if (s.includes('65')) {
-    type = gender === 'หญิง' ? 'เสื้อ 65 หญิง' : 'เสื้อ 65 ชาย';
-  } else if (s.includes('66')) {
-    type = gender === 'หญิง' ? 'เสื้อ 66 หญิง' : 'เสื้อ 66 ชาย';
-  } else if (s.includes('ขอบดำ')) {
-    type = gender === 'หญิง' ? 'เสื้อปกขอบดำ หญิง' : 'เสื้อปกขอบดำ ชาย';
-  } else if (s.includes('แถบดำ') || s.includes('ปกดำ')) {
-    type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
-  } else {
-    type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
   }
+  else if (s.includes('65')) type = shirt('เสื้อ 65');
+  else if (s.includes('66')) type = shirt('เสื้อ 66');
+  else if (s.includes('ขอบดำ')) type = shirt('เสื้อปกขอบดำ');
+  else if (s.includes('แถบดำ') || s.includes('ปกดำ')) type = shirt('เสื้อปกแถบดำ');
 
-  if (!spec) spec = 'ไม่ระบุ / -';
-
-  return { type, spec };
+  return { type, spec: spec || 'ไม่ระบุ / -' };
 }
 
 function parseDate(v) {
@@ -659,7 +692,7 @@ async function readCsv(inp) {
 function drawImport() {
   const rows = IM.keys.map((k, i) => {
     const g = guess(k);
-    const catOpts = CATEGORIES.map(t => `<option value="${esc(t)}" ${t === g.type ? 'selected' : ''}>${esc(t)}</option>`).join('');
+    const catOpts = '<option value="">— เลือกประเภท —</option>' + allTypes().map(t => `<option value="${esc(t)}" ${t === g.type ? 'selected' : ''}>${esc(t)}</option>`).join('');
     return [
       k,
       IM.names[k],
@@ -686,6 +719,8 @@ async function runImport(force) {
       ps[idx][field] = el.value.trim();
     }
   });
+  const missing = ps.find(p => !p.type);
+  if (missing) return alert(`กรุณาเลือกประเภทของ "${missing.key}" ก่อนนำเข้า`);
   try {
     const d = await api('data', { action: 'bulkImport', products: ps, txs: IM.txs.map(({ line, ...t }) => t), force });
     alert(`นำเข้าเรียบร้อย: รับ-จ่าย ${d.txs} รายการ`);
