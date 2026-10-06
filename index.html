@@ -73,19 +73,12 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .bar { display: flex; gap: 10px; margin: 16px 0 12px; }
 .bar input { flex: 1; }
 
-/* Dashboard & Cards Layout */
-.dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
-.stat-card { background: #fff; padding: 16px; border-radius: 8px; border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,0.05); text-align: center; }
-.stat-card .val { font-size: 28px; font-weight: 700; color: var(--navy); margin-top: 4px; }
-.stat-card.danger .val { color: var(--danger); }
-.stat-card.warn .val { color: var(--out); }
-
-.category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 12px; }
+.category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 12px; }
 .cat-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 .cat-card h3 { margin: 0 0 12px 0; font-size: 16px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
 .cat-card .count-tag { font-size: 12px; font-weight: normal; background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 10px; }
 
-/* Large Login Modal Styling */
+/* Login Modal Styling */
 .login-wrap { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: 20px; }
 .login { width: 100%; max-width: 460px; background: #fff; border-radius: 12px; padding: 36px 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid var(--line); }
 .login form { display: flex; flex-direction: column; gap: 18px; border: none; padding: 0; box-shadow: none; }
@@ -96,7 +89,6 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .login button { font-size: 18px; font-weight: 600; padding: 12px; min-height: 52px; border-radius: 8px; background: var(--navy); color: #fff; margin-top: 8px; border: 0; cursor: pointer; }
 .err { color: var(--danger); font-size: 14px; text-align: center; min-height: 1.4em; }
 
-.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
 :focus-visible { outline: 2px solid var(--out); outline-offset: 1px; }
 </style>
 </head>
@@ -123,24 +115,24 @@ const CATEGORIES = [
   'เสื้อกันฝน'
 ];
 
-const MODEL_OPTIONS = [
-  'ทั่วไป / ไม่ระบุ',
-  'ย่ามนำจ่าย แบบ ก.',
-  'ย่ามนำจ่าย ฝาครอบ',
-  'ย่ามนำจ่าย ตาข่าย',
-  'ย่ามนำจ่าย แบบ ก. - ปี 66',
-  'ย่ามนำจ่าย ฝาครอบ - ปี 66',
-  'ย่ามนำจ่าย ตาข่าย - ปี 66',
-  'ทรงสูงย่ามสะพาย',
-  'ตะแกรงครอบท่อไอเสีย'
+const SIZE_MODEL_OPTIONS = [
+  'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '10XL', '11XL', 'ฟรีไซซ์ (Free Size)',
+  'ย่ามนำจ่าย "แบบ ก."',
+  'ย่ามนำจ่าย "ฝาครอบ"',
+  'ย่ามนำจ่าย "ตาข่าย"',
+  'ย่ามนำจ่าย "ทรงสูง"',
+  'ย่ามสะพาย',
+  'ตะแกรงครอบท่อไอเสีย',
+  'ย่ามนำจ่าย "แบบ ก. - ปี 66"',
+  'ย่ามนำจ่าย "ฝาครอบ - ปี 66"',
+  'ย่ามนำจ่าย "ตาข่าย - ปี 66"',
+  'ไม่ระบุ / -'
 ];
-
-const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '10XL', '11XL', 'ฟรีไซซ์ (Free Size)', 'ไม่ระบุ / -'];
 
 const S = {
   token: localStorage.getItem('token'),
   role: localStorage.getItem('role'),
-  tab: 'summary',
+  tab: 'report',
   products: [],
   txs: [],
   editingTxId: null
@@ -148,7 +140,15 @@ const S = {
 
 const canEdit = () => S.role === 'editor';
 const thDate = d => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-const pn = p => [p.type, p.model !== 'ทั่วไป / ไม่ระบุ' ? p.model : '', p.size !== 'ไม่ระบุ / -' ? p.size : ''].filter(Boolean).join(' ');
+
+// แสดง SIZE/แบบ
+const getItemSpec = p => {
+  if (!p) return '';
+  const spec = p.size || p.model || '';
+  return (spec === 'ไม่ระบุ / -' || spec === 'ทั่วไป / ไม่ระบุ') ? '' : spec;
+};
+
+const pn = p => [p.type, getItemSpec(p)].filter(Boolean).join(' ');
 const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const img = p => p && p.image ? `<img class="th" src="${esc(p.image)}" loading="lazy" alt="">` : '<span class="th"></span>';
 
@@ -227,7 +227,6 @@ function render() {
     return;
   }
   const tabs = [
-    ['summary', '📊 สรุป Dashboard'],
     ['report', '📦 สินค้าคงเหลือ'],
     ['tx', '🔄 รับเข้า/จ่ายออก'],
     ['items', '📝 รายการสินค้า']
@@ -242,97 +241,17 @@ function render() {
     </header>
     <main id="v"></main>`;
 
-  const views = { summary: vSummary, report: vReport, tx: vTx, items: vItems, import: vImport };
+  const views = { report: vReport, tx: vTx, items: vItems, import: vImport };
   if (views[S.tab]) views[S.tab]();
 }
 
 function go(t) { S.tab = t; S.editingTxId = null; render(); }
 
-/* 1. Dashboard View */
-function vSummary() {
-  const b = bal();
-  let totalQty = 0, zeroCount = 0, lowCount = 0;
-  
-  S.products.forEach(p => {
-    const qty = b[p.id] || 0;
-    totalQty += qty;
-    if (qty <= 0) zeroCount++;
-    else if (p.min > 0 && qty <= p.min) lowCount++;
-  });
-
-  const zeroProducts = S.products.filter(p => (b[p.id] || 0) <= 0);
-  const zeroRows = zeroProducts.map(p => [
-    { h: img(p) },
-    p.type,
-    p.model || '-',
-    p.size || '-',
-    { h: `<span class="badge badge-zero">หมดคลัง (0)</span>`, c: 'num' }
-  ]);
-
-  const allCats = [...new Set([...CATEGORIES, ...S.products.map(p => p.type)])];
-  let catHtml = '';
-
-  allCats.forEach(cat => {
-    const prods = S.products.filter(p => p.type === cat);
-    if (prods.length === 0) return;
-    
-    let catTotal = 0;
-    const itemRows = prods.map(p => {
-      const qty = b[p.id] || 0;
-      catTotal += qty;
-      let qtyDisplay = qty;
-      if (qty <= 0) qtyDisplay = `<b class="zero">0 (หมด)</b>`;
-      else if (p.min > 0 && qty <= p.min) qtyDisplay = `<b class="low">${qty} (ใกล้หมด)</b>`;
-      
-      return [
-        p.model || 'ทั่วไป',
-        p.size || 'ไม่ระบุ',
-        { h: String(qtyDisplay), c: 'num' }
-      ];
-    });
-
-    catHtml += `
-      <div class="cat-card">
-        <h3><span>${esc(cat)}</span> <span class="count-tag">คงเหลือรวม ${catTotal}</span></h3>
-        ${tbl(['แบบ / รายละเอียด', 'ขนาด (Size)', 'คงเหลือ'], itemRows)}
-      </div>`;
-  });
-
-  const to = {};
-  S.txs.filter(t => t.kind === 'out' && t.party).forEach(t => to[t.party] = (to[t.party] || 0) + t.qty);
-  const topParties = Object.entries(to).sort((a, c) => c[1] - a[1]).slice(0, 5);
-
-  $('#v').innerHTML = `
-    <div class="dash-stats">
-      <div class="stat-card"><div>รายการสินค้าทั้งหมด</div><div class="val">${S.products.length} ชนิด</div></div>
-      <div class="stat-card"><div>จำนวนสินค้ารวมในคลัง</div><div class="val">${totalQty} ชิ้น</div></div>
-      <div class="stat-card danger"><div>สินค้าที่หมดจากคลัง</div><div class="val">${zeroCount} รายการ</div></div>
-      <div class="stat-card warn"><div>สินค้าใกล้หมดคลัง</div><div class="val">${lowCount} รายการ</div></div>
-    </div>
-
-    ${zeroCount > 0 ? `
-      <h2>⚠️ แจ้งเตือนสินค้าที่หมดจากคลังแล้ว (${zeroCount} รายการ)</h2>
-      ${tbl(['', 'ประเภท', 'แบบ / อุปกรณ์', 'ขนาด', 'สถานะ'], zeroRows)}
-      <div style="height:20px;"></div>
-    ` : ''}
-
-    <h2>📊 ยอดสินค้าคงเหลือ แยกตามประเภทและข้อย่อย (แบบ/ขนาด)</h2>
-    <div class="category-grid">${catHtml}</div>
-
-    <div style="height:24px;"></div>
-    <div class="cols">
-      <div>
-        <h2>🚚 ผู้รับสินค้าสูงสุด 5 อันดับ</h2>
-        ${tbl(['ผู้รับสินค้า', 'จำนวนจ่ายออกรวม'], topParties)}
-      </div>
-    </div>`;
-}
-
-/* 2. Inventory View */
+/* 1. Inventory View */
 function vReport() {
   $('#v').innerHTML = `
     <div class="bar">
-      <input id="q" placeholder="🔍 ค้นหาสินค้า เช่น ปกขอบดำ, ชาย, XL, ย่าม..." oninput="drawReport()">
+      <input id="q" placeholder="🔍 ค้นหาสินค้า เช่น ปกขอบดำ, XL, ย่าม..." oninput="drawReport()">
       <button onclick="exportCsv()">📄 ส่งออก CSV</button>
     </div>
     <div id="r"></div>`;
@@ -353,8 +272,10 @@ function drawReport() {
     if (prods.length === 0) return;
     hasData = true;
 
+    let catTotal = 0;
     const rows = prods.map(p => {
       const n = b[p.id] || 0;
+      catTotal += n;
       let statusHtml = `<b>${n}</b>`;
       let cls = '';
       if (n <= 0) { statusHtml = `<span class="badge badge-zero">หมด (0)</span>`; cls = 'zerorow'; }
@@ -362,14 +283,14 @@ function drawReport() {
       
       return {
         cls,
-        data: [{ h: img(p) }, p.model || '-', p.size || '-', { h: statusHtml, c: 'num' }]
+        data: [{ h: img(p) }, getItemSpec(p) || 'ทั่วไป', { h: statusHtml, c: 'num' }]
       };
     });
 
     html += `
       <div class="cat-card">
-        <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">${prods.length} รายการ</span></h3>
-        ${tbl(['รูป', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], rows)}
+        <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">คงเหลือรวม ${catTotal}</span></h3>
+        ${tbl(['รูป', 'SIZE / แบบ', 'คงเหลือ'], rows)}
       </div>`;
   });
 
@@ -380,14 +301,14 @@ function drawReport() {
 
 function exportCsv() {
   const b = bal();
-  const lines = [['ประเภท', 'แบบ/รายละเอียด', 'ไซซ์', 'คงเหลือ'], ...S.products.map(p => [p.type, p.model || '', p.size || '', b[p.id] || 0])]
+  const lines = [['ประเภท', 'SIZE / แบบ', 'คงเหลือ'], ...S.products.map(p => [p.type, getItemSpec(p) || 'ทั่วไป', b[p.id] || 0])]
     .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv' }));
   a.download = 'สินค้าคงเหลือ_' + today() + '.csv'; a.click();
 }
 
-/* 3. Transaction View */
+/* 2. Transaction View */
 function vTx() {
   const prodOptions = S.products.map(p => `<option value="${esc(pn(p))}">`).join('');
   const editingTx = S.editingTxId ? S.txs.find(t => t.id === S.editingTxId) : null;
@@ -517,11 +438,10 @@ async function delTx(id) {
   } catch (e) { alert(e.message); }
 }
 
-/* 4. Items Management View */
+/* 3. Items Management View */
 function vItems() {
   const catOpts = CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  const modelOpts = MODEL_OPTIONS.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  const sizeOpts = SIZE_OPTIONS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  const specOpts = SIZE_MODEL_OPTIONS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
 
   const form = canEdit() ? `
     <form id="pf" onsubmit="saveProd(event)">
@@ -529,16 +449,12 @@ function vItems() {
       <input type="hidden" name="pid">
       <input type="hidden" name="image">
 
-      <label>ประเภทสินค้า (13 หมวด)
+      <label>ประเภทสินค้า
         <select name="type" required>${catOpts}</select>
       </label>
 
-      <label>แบบ / อุปกรณ์
-        <select name="model">${modelOpts}</select>
-      </label>
-
-      <label>ไซซ์ (Size)
-        <select name="size">${sizeOpts}</select>
+      <label>SIZE / แบบ
+        <select name="spec">${specOpts}</select>
       </label>
 
       <label>แจ้งเตือนเมื่อเหลือไม่เกิน
@@ -568,13 +484,12 @@ function drawItems() {
     .map(p => [
       { h: img(p) },
       p.type,
-      p.model || '-',
-      p.size || '-',
+      getItemSpec(p) || '-',
       p.min,
       canEdit() ? { h: `<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')" style="color:var(--danger)">ลบ</button>` } : ''
     ]);
 
-  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'แบบ/อุปกรณ์', 'ไซซ์', 'แจ้งเตือนที่', 'จัดการ'], rows);
+  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'SIZE / แบบ', 'แจ้งเตือนที่', 'จัดการ'], rows);
 }
 
 async function pickImg(inp) {
@@ -593,11 +508,13 @@ async function pickImg(inp) {
 async function saveProd(ev) {
   ev.preventDefault();
   const f = $('#pf');
+  const specVal = f.spec.value;
+  
   const product = {
     id: f.pid.value || undefined,
     type: f.type.value,
-    model: f.model.value,
-    size: f.size.value,
+    size: specVal,
+    model: specVal,
     min: f.min.value,
     image: f.image.value
   };
@@ -615,8 +532,7 @@ function editProd(id) {
   if (!f) return;
   f.pid.value = p.id;
   f.type.value = p.type;
-  f.model.value = p.model || 'ทั่วไป / ไม่ระบุ';
-  f.size.value = p.size || 'ไม่ระบุ / -';
+  f.spec.value = getItemSpec(p) || 'ไม่ระบุ / -';
   f.min.value = p.min || 0;
   f.image.value = p.image || '';
   
@@ -634,7 +550,7 @@ async function delProd(id) {
   } catch (e) { alert(e.message); }
 }
 
-/* 5. CSV Import & Smart Category Guesser */
+/* 4. CSV Import & Smart Category Guesser */
 function parseCsv(t) {
   t = t.replace(/^\ufeff/, ''); const rows = []; let r = [], c = '', q = false;
   for (let i = 0; i < t.length; i++) {
@@ -653,7 +569,7 @@ function cleanName(s) { return String(s || '').replace(/\\/g, '').replace(/\s+/g
 
 function guess(raw) {
   let s = cleanName(raw);
-  let type = '', model = '', size = '';
+  let type = '', spec = '';
 
   let gender = '';
   if (/ชาย|\bช\b/i.test(s)) gender = 'ชาย';
@@ -661,7 +577,7 @@ function guess(raw) {
 
   const sizeMatch = /((?:\d{1,2})?XL|XS|S|M|L)\b/i.exec(s);
   if (sizeMatch) {
-    size = sizeMatch[1].toUpperCase();
+    spec = sizeMatch[1].toUpperCase();
   }
 
   if (s.includes('หมวกนิรภัย') || s.includes('หมวก')) {
@@ -674,14 +590,15 @@ function guess(raw) {
     type = 'เสื้อแจ๊คเก็ต ปฏิบัติการ';
   } else if (s.includes('ย่าม') || s.includes('ตะแกรง') || s.includes('ฝาครอบ') || s.includes('ตาข่าย') || s.includes('ทรงสูง')) {
     type = 'ย่ามนำจ่าย และ อุปกรณ์';
-    if (s.includes('แบบ ก.') && s.includes('66')) model = 'ย่ามนำจ่าย แบบ ก. - ปี 66';
-    else if (s.includes('ฝาครอบ') && s.includes('66')) model = 'ย่ามนำจ่าย ฝาครอบ - ปี 66';
-    else if (s.includes('ตาข่าย') && s.includes('66')) model = 'ย่ามนำจ่าย ตาข่าย - ปี 66';
-    else if (s.includes('แบบ ก.')) model = 'ย่ามนำจ่าย แบบ ก.';
-    else if (s.includes('ฝาครอบ')) model = 'ย่ามนำจ่าย ฝาครอบ';
-    else if (s.includes('ตาข่าย')) model = 'ย่ามนำจ่าย ตาข่าย';
-    else if (s.includes('ทรงสูง')) model = 'ทรงสูงย่ามสะพาย';
-    else if (s.includes('ตะแกรง')) model = 'ตะแกรงครอบท่อไอเสีย';
+    if (s.includes('แบบ ก.') && s.includes('66')) spec = 'ย่ามนำจ่าย "แบบ ก. - ปี 66"';
+    else if (s.includes('ฝาครอบ') && s.includes('66')) spec = 'ย่ามนำจ่าย "ฝาครอบ - ปี 66"';
+    else if (s.includes('ตาข่าย') && s.includes('66')) spec = 'ย่ามนำจ่าย "ตาข่าย - ปี 66"';
+    else if (s.includes('แบบ ก.')) spec = 'ย่ามนำจ่าย "แบบ ก."';
+    else if (s.includes('ฝาครอบ')) spec = 'ย่ามนำจ่าย "ฝาครอบ"';
+    else if (s.includes('ตาข่าย')) spec = 'ย่ามนำจ่าย "ตาข่าย"';
+    else if (s.includes('ทรงสูง')) spec = 'ย่ามนำจ่าย "ทรงสูง"';
+    else if (s.includes('สะพาย')) spec = 'ย่ามสะพาย';
+    else if (s.includes('ตะแกรง')) spec = 'ตะแกรงครอบท่อไอเสีย';
   } else if (s.includes('65')) {
     type = gender === 'หญิง' ? 'เสื้อ 65 หญิง' : 'เสื้อ 65 ชาย';
   } else if (s.includes('66')) {
@@ -694,10 +611,9 @@ function guess(raw) {
     type = gender === 'หญิง' ? 'เสื้อปกแถบดำ หญิง' : 'เสื้อปกแถบดำ ชาย';
   }
 
-  if (!model) model = 'ทั่วไป / ไม่ระบุ';
-  if (!size) size = 'ไม่ระบุ / -';
+  if (!spec) spec = 'ไม่ระบุ / -';
 
-  return { type, model, size };
+  return { type, spec };
 }
 
 function parseDate(v) {
@@ -715,7 +631,7 @@ let IM = null;
 function vImport() {
   $('#v').innerHTML = `
     <h2>📥 นำเข้าข้อมูลจากไฟล์ CSV</h2>
-    <p style="color:#64748b;">ระบบจะทำการอ่านข้อมูลและแยกเข้า 13 หมวดหมู่ให้อัตโนมัติ</p>
+    <p style="color:#64748b;">ระบบจะทำการอ่านข้อมูลและแยกเข้าประเภทและ SIZE/แบบ ให้อัตโนมัติ</p>
     <input type="file" accept=".csv,text/csv" onchange="readCsv(this)">
     <div id="r"></div>`;
 }
@@ -743,20 +659,28 @@ function drawImport() {
       k,
       IM.names[k],
       { h: `<select data-i="${i}" data-f="type">${catOpts}</select>` },
-      { h: `<input data-i="${i}" data-f="model" value="${esc(g.model)}">` },
-      { h: `<input data-i="${i}" data-f="size" value="${esc(g.size)}">` }
+      { h: `<input data-i="${i}" data-f="spec" value="${esc(g.spec)}">` }
     ];
   });
 
   $('#r').innerHTML = (IM.warn.length ? `<h2>ข้อควรตรวจ (${IM.warn.length})</h2><ul>${IM.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '') +
     `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2>` +
-    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภท (13 หมวด)', 'แบบ/รายละเอียด', 'ไซซ์'], rows) +
+    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภทสินค้า', 'SIZE / แบบ'], rows) +
     `<p><button class="p" onclick="runImport()">นำเข้าข้อมูลลงระบบ</button></p>`;
 }
 
 async function runImport(force) {
   const ps = IM.keys.map(k => ({ key: k }));
-  document.querySelectorAll('#r [data-i]').forEach(el => { ps[+el.dataset.i][el.dataset.f] = el.value.trim(); });
+  document.querySelectorAll('#r [data-i]').forEach(el => { 
+    const idx = +el.dataset.i;
+    const field = el.dataset.f;
+    if (field === 'spec') {
+      ps[idx].size = el.value.trim();
+      ps[idx].model = el.value.trim();
+    } else {
+      ps[idx][field] = el.value.trim();
+    }
+  });
   try {
     const d = await api('data', { action: 'bulkImport', products: ps, txs: IM.txs.map(({ line, ...t }) => t), force });
     alert(`นำเข้าเรียบร้อย: รับ-จ่าย ${d.txs} รายการ`);
