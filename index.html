@@ -73,9 +73,16 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .bar { display: flex; gap: 10px; margin: 16px 0 12px; }
 .bar input { flex: 1; }
 
-.category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 12px; }
-.cat-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-.cat-card h3 { margin: 0 0 12px 0; font-size: 16px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+.category-grid { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; }
+.cat-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.cat-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.cat-card h3 { margin: 0 0 6px 0; font-size: 15px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.cat-card table { margin: 0; }
+.cat-card th, .cat-card td { padding: 4px 8px; line-height: 1.35; }
+.cat-card td.num, .cat-card th:last-child { width: 1%; white-space: nowrap; }
+.cat-card .badge { white-space: nowrap; padding: 0 8px; font-size: 12px; }
+.cat-card .count-tag { white-space: nowrap; }
+.th.th-sm { width: 30px; height: 30px; }
 .cat-card .count-tag { font-size: 12px; font-weight: normal; background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 10px; }
 
 /* Login */
@@ -330,46 +337,67 @@ function vReport() {
   drawReport();
 }
 
+let _cards = [], _cols = 0;
+
+function layoutCards() {
+  const host = $('#r .category-grid'); if (!host) return;
+  const n = Math.max(1, Math.min(_cards.length, Math.floor((host.parentElement.clientWidth + 12) / 342)));
+  _cols = n;
+  const cols = Array.from({ length: n }, () => ({ h: 0, html: '' }));
+  // วางกล่องถัดไปในคอลัมน์ที่สั้นที่สุด -> ไม่เหลือที่ว่างใต้กล่องที่สั้นกว่า
+  _cards.forEach(c => { const t = cols.reduce((a, b) => (b.h < a.h ? b : a)); t.html += c.html; t.h += c.h; });
+  host.innerHTML = cols.map(c => `<div class="cat-col">${c.html}</div>`).join('');
+}
+window.addEventListener('resize', () => {
+  clearTimeout(window._rz);
+  window._rz = setTimeout(() => {
+    const host = $('#r .category-grid'); if (!host) return;
+    const n = Math.max(1, Math.min(_cards.length, Math.floor((host.parentElement.clientWidth + 12) / 342)));
+    if (n !== _cols) layoutCards();
+  }, 150);
+});
+
 function drawReport() {
   const b = bal();
   const q = ($('#q')?.value || '').toLowerCase();
   const filtered = S.products.filter(p => pn(p).toLowerCase().includes(q));
-
   const allCats = [...new Set([...CATEGORIES, ...filtered.map(p => p.type)])];
-  let html = '<div class="category-grid">';
+  const thumb = p => p.image ? `<img class="th th-sm" src="${esc(p.image)}" loading="lazy" alt="">` : '';
 
-  let hasData = false;
+  _cards = [];
   allCats.forEach(cat => {
     const prods = filtered.filter(p => p.type === cat).sort(bySpec);
     if (prods.length === 0) return;
-    hasData = true;
+    const hasImg = prods.some(p => p.image);   // ไม่มีรูปเลย -> ตัดคอลัมน์รูปออก ประหยัดที่
+    let catTotal = 0, est = 48;
 
-    let catTotal = 0;
     const rows = prods.map(p => {
       const n = b[p.id] || 0;
       catTotal += n;
-      let statusHtml = `<b>${n}</b>`;
-      let cls = '';
+      let statusHtml = `<b>${n}</b>`, cls = '';
       if (n < 0) { statusHtml = `<span class="badge badge-zero">ติดลบ (${n})</span>`; cls = 'zerorow'; }
       else if (n === 0) { statusHtml = `<span class="badge badge-zero">หมด (0)</span>`; cls = 'zerorow'; }
       else if (p.min > 0 && n <= p.min) { statusHtml = `<b class="low">${n}</b>`; cls = 'lowrow'; }
-      
-      return {
-        cls,
-        data: [{ h: img(p) }, getItemSpec(p) || 'ทั่วไป', { h: statusHtml, c: 'num' }]
-      };
+
+      const spec = getItemSpec(p) || 'ทั่วไป';
+      est += Math.max(p.image ? 38 : 0, Math.ceil(spec.length / 26) * 19 + 9);
+      const cells = [spec, { h: statusHtml, c: 'num' }];
+      if (hasImg) cells.unshift({ h: thumb(p) });
+      return { cls, data: cells };
     });
 
-    html += `
-      <div class="cat-card">
+    _cards.push({
+      h: est,
+      html: `<div class="cat-card">
         <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">คงเหลือรวม ${catTotal}</span></h3>
-        ${tbl(['รูป', 'size / แบบ', 'คงเหลือ'], rows)}
-      </div>`;
+        ${tbl(hasImg ? ['รูป', 'size / แบบ', 'คงเหลือ'] : ['size / แบบ', 'คงเหลือ'], rows)}
+      </div>`
+    });
   });
 
-  html += '</div>';
-  if (!hasData) html = `<div style="text-align:center;padding:40px;color:#64748b;">ไม่พบข้อมูลสินค้าที่ค้นหา</div>`;
-  $('#r').innerHTML = html;
+  if (!_cards.length) { $('#r').innerHTML = `<div style="text-align:center;padding:40px;color:#64748b;">ไม่พบข้อมูลสินค้าที่ค้นหา</div>`; return; }
+  $('#r').innerHTML = '<div class="category-grid"></div>';
+  layoutCards();
 }
 
 function exportCsv() {
