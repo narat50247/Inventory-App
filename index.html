@@ -78,16 +78,27 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .cat-card h3 { margin: 0 0 12px 0; font-size: 16px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
 .cat-card .count-tag { font-size: 12px; font-weight: normal; background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 10px; }
 
-/* Login Modal Styling */
-.login-wrap { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: 20px; }
-.login { width: 100%; max-width: 460px; background: #fff; border-radius: 12px; padding: 36px 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid var(--line); }
-.login form { display: flex; flex-direction: column; gap: 18px; border: none; padding: 0; box-shadow: none; margin-bottom: 0; }
-.login h2 { font-size: 24px; text-align: center; color: var(--navy); margin-bottom: 8px; font-weight: 700; }
-.login label { font-size: 15px; font-weight: 600; }
-.login input[type=password] { font-size: 20px; padding: 12px 16px; min-height: 52px; letter-spacing: 3px; border-radius: 8px; border: 2px solid #cbd5e1; }
-.login input[type=password]:focus { border-color: var(--navy); }
-.login button { font-size: 18px; font-weight: 600; padding: 12px; min-height: 52px; border-radius: 8px; background: var(--navy); color: #fff; margin-top: 8px; border: 0; cursor: pointer; }
-.err { color: var(--danger); font-size: 14px; text-align: center; min-height: 1.4em; }
+/* Login */
+.login-page { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+  background: radial-gradient(900px 500px at 12% 8%, rgba(64,140,190,.38), transparent 60%), radial-gradient(700px 500px at 92% 96%, rgba(242,106,27,.16), transparent 60%), linear-gradient(160deg, #0e2742 0%, #16395c 60%, #1b4d72 100%); }
+.login-card { width: 100%; max-width: 440px; background: rgba(255,255,255,.97); border-radius: 22px; padding: 38px 32px 28px; box-shadow: 0 24px 60px rgba(4,16,32,.45); text-align: center; }
+.login-logo { width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 20px; display: grid; place-items: center; background: linear-gradient(145deg, #1d5a8a, #16395c); box-shadow: 0 10px 22px rgba(22,57,92,.35); }
+.login-card h1 { font-size: 24px; line-height: 1.35; margin: 0 0 10px; color: var(--navy); font-weight: 700; }
+.login-sub { margin: 0 0 26px; color: #51606f; font-size: 14.5px; line-height: 1.6; }
+.login-sub b { color: var(--ink); font-weight: 600; }
+.login-card form { display: flex; flex-direction: column; gap: 12px; text-align: left; background: none; border: 0; box-shadow: none; padding: 0; margin: 0; }
+.login-card label { font-size: 15px; font-weight: 600; }
+.pw-wrap { position: relative; }
+.pw-wrap input { width: 100%; font-size: 20px; min-height: 56px; padding: 12px 54px 12px 16px; border: 2px solid #cbd5e1; border-radius: 12px; }
+.pw-wrap input:focus { border-color: var(--navy); box-shadow: 0 0 0 4px rgba(22,57,92,.12); }
+.pw-wrap .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; font-size: 20px; border-radius: 10px; }
+.pw-wrap .eye:hover { background: #eef2f6; }
+.login-card .go { min-height: 56px; border: 0; border-radius: 12px; font: inherit; font-size: 19px; font-weight: 600; color: #fff; cursor: pointer; background: linear-gradient(135deg, #1d5a8a, #16395c); box-shadow: 0 8px 18px rgba(22,57,92,.3); transition: transform .12s, box-shadow .12s; }
+.login-card .go:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(22,57,92,.35); }
+.login-foot { margin-top: 22px; font-size: 12.5px; color: #8392a1; }
+.err { color: var(--danger); font-size: 14px; min-height: 1.4em; }
+.opt-bar { margin: 0 0 12px; }
+#opt { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
 
 [hidden] { display: none !important; }
 th .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -141,6 +152,7 @@ const S = {
   tab: 'report',
   products: [],
   txs: [],
+  options: { hiddenSpecs: [] },
   editingTxId: null,
   txSort: { k: 'date', dir: -1 },
   txPage: 1,
@@ -150,7 +162,7 @@ const S = {
 const canEdit = () => S.role === 'editor';
 const thDate = d => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
-// แสดง SIZE/แบบ
+// แสดง size/แบบ
 const getItemSpec = p => {
   if (!p) return '';
   const spec = p.size || p.model || '';
@@ -159,17 +171,33 @@ const getItemSpec = p => {
 
 const pn = p => p ? [p.type, getItemSpec(p)].filter(Boolean).join(' ') : '';
 
+// ลำดับการแสดงของ "แบบ" ในหมวดย่ามนำจ่าย และ อุปกรณ์ (แก้ลำดับได้ที่นี่)
+const MODEL_ORDER = [
+  'ย่ามนำจ่าย "แบบ ก."',
+  'ย่ามนำจ่าย "ฝาครอบ"',
+  'ย่ามนำจ่าย "ทรงสูง"',
+  'ย่ามนำจ่าย "แบบ ก. - ปี 66"',
+  'ย่ามนำจ่าย "ฝาครอบ - ปี 66"',
+  'ย่ามนำจ่าย "ตาข่าย - ปี 66"',
+  'ตะแกรงครอบท่อไอเสีย'
+];
+const normSpec = s => String(s || '').replace(/["'“”\s]/g, '').toUpperCase();
+const MODEL_RANK = Object.fromEntries(MODEL_ORDER.map((m, i) => [normSpec(m), i]));
+
 // ลำดับไซซ์: XS S M L XL 2XL 3XL ... แล้วตามด้วย ฟรีไซซ์ และ "แบบ" อื่นๆ
 const specRank = s => {
   s = String(s || '').trim().toUpperCase();
   if (s === 'XS') return 0; if (s === 'S') return 1; if (s === 'M') return 2; if (s === 'L') return 3;
   const m = /^(\d{0,2})XL$/.exec(s); if (m) return 3 + (+m[1] || 1);
   if (s.startsWith('ฟรีไซซ์')) return 100;
+  const k = normSpec(s); if (k in MODEL_RANK) return 150 + MODEL_RANK[k];
   return 200;
 };
 const bySpec = (a, c) => specRank(getItemSpec(a)) - specRank(getItemSpec(c)) || getItemSpec(a).localeCompare(getItemSpec(c), 'th', { numeric: true });
 const allTypes = () => [...new Set([...CATEGORIES, ...S.products.map(p => p.type).filter(Boolean)])];
 const allSpecs = () => [...new Set([...SIZE_MODEL_OPTIONS, ...S.products.map(p => getItemSpec(p)).filter(Boolean)])];
+const hiddenSet = () => new Set((S.options && S.options.hiddenSpecs) || []);
+const visibleSpecs = () => { const h = hiddenSet(); return allSpecs().filter(s => s !== 'ไม่ระบุ / -' && !h.has(s)); };
 const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const img = p => p && p.image ? `<img class="th" src="${esc(p.image)}" loading="lazy" alt="">` : '<span class="th"></span>';
 
@@ -199,9 +227,11 @@ async function api(path, body) {
   });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { logout(); throw new Error('หมดเวลาเข้าใช้งาน กรุณาเข้าสู่ระบบใหม่'); }
-  if (!r.ok) throw Object.assign(new Error(j.error || 'เกิดข้อผิดพลาด'), { data: j });
+  if (!r.ok) throw Object.assign(new Error(j.error || ('เกิดข้อผิดพลาด (รหัส ' + r.status + ')')), { data: j });
   return j;
 }
+
+function togglePw() { const i = $('#pw'); i.type = i.type === 'password' ? 'text' : 'password'; }
 
 async function login(ev) {
   ev.preventDefault();
@@ -225,7 +255,7 @@ function logout() {
 async function load() {
   try {
     const d = await api('data');
-    S.products = d.products; S.txs = d.txs;
+    S.products = d.products; S.txs = d.txs; S.options = d.options || { hiddenSpecs: [] };
     render();
   } catch (e) { alert(e.message); }
 }
@@ -233,16 +263,23 @@ async function load() {
 function render() {
   if (!S.token) {
     $('#app').innerHTML = `
-      <div class="login-wrap">
-        <div class="login">
+      <div class="login-page">
+        <div class="login-card">
+          <div class="login-logo">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          </div>
+          <h1>ยินดีต้อนรับเข้าสู่<br>ระบบจัดการคลังสินค้า</h1>
+          <p class="login-sub">เครื่องมือเครื่องใช้สำหรับผู้ปฏิบัติงานภายนอก<br><b>สำนักงานไปรษณีย์นครหลวง 1</b></p>
           <form onsubmit="login(event)">
-            <h2>เข้าสู่ระบบคลังสินค้า</h2>
-            <label>รหัสผ่านเข้าใช้งาน
-              <input id="pw" type="password" autocomplete="current-password" required autofocus placeholder="กรอกรหัสผ่านที่นี่">
-            </label>
-            <div class="err" id="err"></div>
-            <button type="submit">เข้าสู่ระบบ</button>
+            <label for="pw">รหัสผ่านเข้าใช้งาน</label>
+            <div class="pw-wrap">
+              <input id="pw" type="password" autocomplete="current-password" required autofocus placeholder="กรอกรหัสผ่าน">
+              <button type="button" class="eye" onclick="togglePw()" aria-label="แสดงหรือซ่อนรหัสผ่าน">👁️</button>
+            </div>
+            <div class="err" id="err" role="alert"></div>
+            <button type="submit" class="go">เข้าสู่ระบบ</button>
           </form>
+          <div class="login-foot">สำหรับผู้ที่ได้รับอนุญาตเท่านั้น</div>
         </div>
       </div>`;
     return;
@@ -312,7 +349,7 @@ function drawReport() {
     html += `
       <div class="cat-card">
         <h3><span>📦 ${esc(cat)}</span> <span class="count-tag">คงเหลือรวม ${catTotal}</span></h3>
-        ${tbl(['รูป', 'SIZE / แบบ', 'คงเหลือ'], rows)}
+        ${tbl(['รูป', 'size / แบบ', 'คงเหลือ'], rows)}
       </div>`;
   });
 
@@ -323,7 +360,7 @@ function drawReport() {
 
 function exportCsv() {
   const b = bal();
-  const lines = [['ประเภท', 'SIZE / แบบ', 'คงเหลือ'], ...S.products.map(p => [p.type, getItemSpec(p) || 'ทั่วไป', b[p.id] || 0])]
+  const lines = [['ประเภท', 'size / แบบ', 'คงเหลือ'], ...S.products.map(p => [p.type, getItemSpec(p) || 'ทั่วไป', b[p.id] || 0])]
     .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv' }));
@@ -496,9 +533,9 @@ function toggleNew(sel) {
 function vItems() {
   const catOpts = allTypes().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('') + '<option value="__new">➕ เพิ่มประเภทใหม่...</option>';
   const o = s => `<option value="${esc(s)}">${esc(s)}</option>`;
-  const specs = allSpecs().filter(s => s !== 'ไม่ระบุ / -');
-  const specOpts = `<optgroup label="ไซซ์">${specs.filter(s => specRank(s) < 200).sort((a, c) => specRank(a) - specRank(c)).map(o).join('')}</optgroup>` +
-    `<optgroup label="แบบ">${specs.filter(s => specRank(s) >= 200).sort((a, c) => a.localeCompare(c, 'th')).map(o).join('')}</optgroup>` +
+  const specs = visibleSpecs();
+  const specOpts = `<optgroup label="ไซซ์">${specs.filter(s => specRank(s) <= 100).sort((a, c) => specRank(a) - specRank(c)).map(o).join('')}</optgroup>` +
+    `<optgroup label="แบบ">${specs.filter(s => specRank(s) > 100).sort((a, c) => specRank(a) - specRank(c) || a.localeCompare(c, 'th')).map(o).join('')}</optgroup>` +
     `<option value="ไม่ระบุ / -">ไม่ระบุ / -</option><option value="__new">➕ เพิ่มไซซ์ / แบบใหม่...</option>`;
 
   const form = canEdit() ? `
@@ -512,7 +549,7 @@ function vItems() {
         <input name="newType" class="new-in" placeholder="พิมพ์ชื่อประเภทใหม่ เช่น เสื้อ 67 ชาย" hidden>
       </label>
 
-      <label>SIZE / แบบ
+      <label>size / แบบ
         <select name="spec" onchange="toggleNew(this)">${specOpts}</select>
         <input name="newSpec" class="new-in" placeholder="พิมพ์ไซซ์หรือแบบใหม่ เช่น 6XL" hidden>
       </label>
@@ -533,7 +570,8 @@ function vItems() {
       </div>
     </form>` : '';
 
-  $('#v').innerHTML = form + `<div class="bar"><input id="q" placeholder="🔍 ค้นหารายการสินค้า..." oninput="drawItems()"></div><div id="r"></div>`;
+  $('#v').innerHTML = form + (canEdit() ? '<div class="opt-bar"><button type="button" class="s" onclick="toggleOpt()">⚙️ จัดการตัวเลือก size / แบบ (ลบออกจาก dropdown)</button></div><div id="opt" hidden></div>' : '') +
+    `<div class="bar"><input id="q" placeholder="🔍 ค้นหารายการสินค้า..." oninput="drawItems()"></div><div id="r"></div>`;
   drawItems();
 }
 
@@ -548,20 +586,47 @@ function drawItems() {
       p.min,
       canEdit() ? { h: `<button class="s" onclick="editProd('${p.id}')">แก้ไข</button> <button class="s" onclick="delProd('${p.id}')" style="color:var(--danger)">ลบ</button>` } : ''
     ]);
-  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'SIZE / แบบ', 'แจ้งเตือนที่', 'จัดการ'], rows);
+  $('#r').innerHTML = tbl(['รูป', 'ประเภท', 'size / แบบ', 'แจ้งเตือนที่', 'จัดการ'], rows);
+}
+
+function toggleOpt() {
+  const d = $('#opt'); d.hidden = !d.hidden;
+  if (!d.hidden) drawOpt();
+}
+function drawOpt() {
+  const hid = hiddenSet(), use = {};
+  S.products.forEach(p => { const s = getItemSpec(p); if (s) use[s] = (use[s] || 0) + 1; });
+  const list = allSpecs().filter(s => s !== 'ไม่ระบุ / -').sort((a, c) => specRank(a) - specRank(c) || a.localeCompare(c, 'th'));
+  $('#opt').innerHTML = `<p style="margin-top:0">การลบจะซ่อนตัวเลือกออกจาก dropdown เท่านั้น สินค้าและประวัติเดิมไม่หายไป และกู้คืนได้</p>` +
+    tbl(['size / แบบ', 'สินค้าที่ใช้อยู่', 'สถานะ', ''], list.map(s => [s, use[s] || 0, hid.has(s) ? 'ซ่อนอยู่' : 'แสดงใน dropdown',
+      { h: `<button type="button" class="s" data-s="${esc(s)}" onclick="setSpecHidden(this.dataset.s, ${!hid.has(s)})" ${hid.has(s) ? '' : 'style="color:var(--danger)"'}>${hid.has(s) ? 'กู้คืน' : '🗑️ ลบออก'}</button>` }]));
+}
+async function setSpecHidden(s, hide) {
+  const n = S.products.filter(p => getItemSpec(p) === s).length;
+  if (hide && !confirm(`ลบ "${s}" ออกจาก dropdown?` + (n ? `\nมีสินค้า ${n} รายการใช้อยู่ (สินค้ายังอยู่เหมือนเดิม)` : ''))) return;
+  const h = hiddenSet(); if (hide) h.add(s); else h.delete(s);
+  try {
+    const d = await api('data', { action: 'saveOptions', options: { hiddenSpecs: [...h] } });
+    S.options = d.options; vItems(); $('#opt').hidden = false; drawOpt();
+  } catch (e) { alert(e.message); }
 }
 
 async function pickImg(inp) {
   const file = inp.files[0]; if (!file) return;
-  $('#ip').textContent = 'กำลังอัปโหลดรูปภาพ...';
+  const st = $('#ip');
+  st.style.color = ''; st.textContent = 'กำลังอัปโหลดรูปภาพ...';
   try {
-    const bmp = await createImageBitmap(file), k = Math.min(1, 800 / Math.max(bmp.width, bmp.height));
+    let bmp;
+    try { bmp = await createImageBitmap(file); }
+    catch { throw new Error('เบราว์เซอร์อ่านไฟล์รูปนี้ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG'); }
+    const k = Math.min(1, 800 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     const d = await api('upload', { dataUrl: c.toDataURL('image/jpeg', .8) });
     $('#pf').image.value = d.url;
-    $('#ip').innerHTML = `<img class="th" src="${esc(d.url)}" alt="">`;
-  } catch (e) { $('#ip').textContent = e.message; }
+    st.innerHTML = `<img class="th" src="${esc(d.url)}" alt=""> <small>อัปโหลดแล้ว กด "บันทึกรายการสินค้า" เพื่อบันทึก</small>`;
+  } catch (e) { st.style.color = 'var(--danger)'; st.textContent = '❌ ' + e.message; }
+  inp.value = '';
 }
 
 async function saveProd(ev) {
@@ -578,6 +643,7 @@ async function saveProd(ev) {
     const d = await api('data', { action: 'saveProduct', product });
     const i = S.products.findIndex(p => p.id === d.product.id);
     if (i < 0) S.products.push(d.product); else S.products[i] = d.product;
+    if (hiddenSet().has(spec)) { const h = hiddenSet(); h.delete(spec); const o = await api('data', { action: 'saveOptions', options: { hiddenSpecs: [...h] } }); S.options = o.options; }
     vItems();
   } catch (e) { alert(e.message); }
 }
@@ -587,7 +653,9 @@ function editProd(id) {
   if (!f) return;
   f.pid.value = p.id;
   f.type.value = p.type;
-  f.spec.value = getItemSpec(p) || 'ไม่ระบุ / -';
+  const sp = getItemSpec(p) || 'ไม่ระบุ / -';
+  if (![...f.spec.options].some(o => o.value === sp)) f.spec.add(new Option(sp, sp), 0);
+  f.spec.value = sp;
   f.min.value = p.min || 0;
   f.image.value = p.image || '';
   
@@ -669,7 +737,7 @@ let IM = null;
 function vImport() {
   $('#v').innerHTML = `
     <h2>📥 นำเข้าข้อมูลจากไฟล์ CSV</h2>
-    <p style="color:#64748b;">ระบบจะทำการอ่านข้อมูลและแยกเข้าประเภทและ SIZE/แบบ ให้อัตโนมัติ</p>
+    <p style="color:#64748b;">ระบบจะทำการอ่านข้อมูลและแยกเข้าประเภทและ size/แบบ ให้อัตโนมัติ</p>
     <input type="file" accept=".csv,text/csv" onchange="readCsv(this)">
     <div id="r"></div>`;
 }
@@ -703,7 +771,7 @@ function drawImport() {
 
   $('#r').innerHTML = (IM.warn.length ? `<h2>ข้อควรตรวจ (${IM.warn.length})</h2><ul>${IM.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '') +
     `<h2>ตรวจการแยกชื่อสินค้า (${IM.keys.length} รายการ จาก ${IM.txs.length} แถว)</h2>` +
-    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภทสินค้า', 'SIZE / แบบ'], rows) +
+    tbl(['ชื่อในชีต', 'จำนวนแถว', 'ประเภทสินค้า', 'size / แบบ'], rows) +
     `<p><button class="p" onclick="runImport()">นำเข้าข้อมูลลงระบบ</button></p>`;
 }
 
