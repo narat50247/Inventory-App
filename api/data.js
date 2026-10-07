@@ -86,8 +86,77 @@ export default async function handler(req, res) {
   if (body.action === 'saveOptions') {
     const o = body.options || {};
     const hiddenSpecs = Array.isArray(o.hiddenSpecs) ? [...new Set(o.hiddenSpecs.map((x) => str(x, 80)).filter(Boolean))].slice(0, 500) : [];
-    await redis.set('inv:options', { hiddenSpecs });
-    return res.json({ options: { hiddenSpecs } });
+    const cur = (await redis.get('inv:options')) || {};
+    const options = { ...cur, hiddenSpecs };
+    await redis.set('inv:options', options);
+    return res.json({ options });
+  }
+
+  if (body.action === 'renameSpec') {
+    const from = str(body.from, 80), to = str(body.to, 80);
+    if (!from || !to || from === to) return fail(res, 400, 'ชื่อใหม่ไม่ถูกต้อง');
+    const specOf = (p) => p.size || p.model;
+    const affected = products.filter((p) => specOf(p) === from);
+    if (!affected.length) return fail(res, 404, 'ไม่พบสินค้าที่ใช้ชื่อนี้');
+    for (const p of affected) {
+      if (products.some((x) => x.id !== p.id && x.type === p.type && specOf(x) === to))
+        return fail(res, 409, `ประเภท "${p.type}" มี "${to}" อยู่แล้ว จึงเปลี่ยนชื่อไม่ได้ (จะซ้ำกัน)`);
+    }
+    for (const p of affected) { p.size = to; p.model = to; }
+    await redis.set('inv:products', products);
+    const cur = (await redis.get('inv:options')) || {};
+    const renames = { ...(cur.renames || {}) };
+    for (const k of Object.keys(renames)) if (renames[k] === from) renames[k] = to;
+    renames[from] = to;
+    const hidden = new Set(cur.hiddenSpecs || []);
+    hidden.add(from); hidden.delete(to);
+    const options = { ...cur, renames, hiddenSpecs: [...hidden] };
+    await redis.set('inv:options', options);
+    return res.json({ products, options });
+  }
+
+  if (body.action === 'syncTx') {
+    const rows = Array.isArray(body.rows) ? body.rows.slice(0, 20000) : [];
+    if (!rows.length) return fail(res, 400, 'ไฟล์ไม่มีรายการข้อมูล');
+    const all = await redis.lrange('inv:tx', 0, -1);
+    const byId = new Map(all.map((t) => [t.id, t]));
+    const byName = new Map(products.map((p) => [name(p), p]));
+    const idByKey = {};
+    for (const x of Array.isArray(body.newProducts) ? body.newProducts.slice(0, 2000) : []) {
+      const spec = str(x.spec, 80) || 'ไม่ระบุ / -';
+      const c = { type: str(x.type, 60), model: spec, size: spec };
+      if (!c.type) return fail(res, 400, 'มีรายการที่ไม่ระบุหมวดสินค้า');
+      let p = byName.get(name(c));
+      if (!p) { p = { id: randomUUID(), ...c, min: 0, image: '' }; products.push(p); byName.set(name(c), p); }
+      idByKey[x.key] = p.id;
+    }
+    const valid = new Set(products.map((p) => p.id));
+    const FIELDS = ['date', 'kind', 'productId', 'qty', 'docNo', 'party', 'note', 'image'];
+    const used = new Set(), out = [], now = Date.now();
+    for (const [i, r] of rows.entries()) {
+      const qty = Number(r.qty), pid = r.productId || idByKey[r.key];
+      if (!valid.has(pid) || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || !['in', 'out'].includes(r.kind) || !Number.isInteger(qty) || qty < 1)
+        return fail(res, 400, 'ข้อมูลบางแถวไม่ถูกต้อง ไม่มีการเปลี่ยนแปลงใดๆ');
+      const data = { date: r.date, kind: r.kind, productId: pid, qty, docNo: str(r.docNo, 60), party: str(r.party), note: str(r.note, 300), image: img(r.image) };
+      const old = r.id && !used.has(r.id) ? byId.get(r.id) : null;
+      if (old) {
+        used.add(old.id);
+        out.push(FIELDS.every((k) => (old[k] ?? '') === data[k]) ? old : { ...old, ...data, editedAt: now });
+      } else out.push({ id: randomUUID(), ...data, at: now + i });
+    }
+    const final = [...(body.deleteMissing ? [] : all.filter((t) => !used.has(t.id))), ...out];
+    const tmp = 'inv:tx:new';
+    await redis.del(tmp);
+    for (let i = 0; i < final.length; i += 500) await redis.rpush(tmp, ...final.slice(i, i + 500));
+    try {
+      if (all.length) await redis.rename('inv:tx', 'inv:tx:backup');   // สำรองข้อมูลเดิม 1 ชุดล่าสุด
+      await redis.rename(tmp, 'inv:tx');
+    } catch (e) {
+      if (all.length) await redis.rename('inv:tx:backup', 'inv:tx').catch(() => {});
+      return fail(res, 500, 'บันทึกไม่สำเร็จ: ' + (e.message || e));
+    }
+    await redis.set('inv:products', products);
+    return res.json({ products, txs: final });
   }
 
   if (body.action === 'deleteTx') {
