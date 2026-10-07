@@ -3,6 +3,7 @@ import { redis, getRole } from './_lib.js';
 
 const fail = (res, code, error, extra = {}) => res.status(code).json({ error, ...extra });
 const str = (v, n = 200) => String(v || '').slice(0, n).trim();
+const img = (v) => (typeof v === 'string' && v.startsWith('https://') ? v : '');
 const name = (p) => [p.type, p.model, p.size].filter(Boolean).join(' ');
 const balance = (txs, id) => txs.reduce((n, t) => (t.productId === id ? n + (t.kind === 'in' ? t.qty : -t.qty) : n), 0);
 const validTx = (t, p, qty) =>
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
       if (qty > have) return fail(res, 409, `ยอดคงเหลือไม่พอ (เหลือ ${have})`, { short: true });
     }
     const tx = { id: randomUUID(), date: t.date, kind: t.kind, productId: p.id, qty,
-      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), at: Date.now() };
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), at: Date.now() };
     await redis.rpush('inv:tx', tx);
     return res.json({ tx });
   }
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
     if (idx < 0) return fail(res, 404, 'ไม่พบรายการ');
     if (!validTx(t, p, qty)) return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
     const tx = { ...all[idx], date: t.date, kind: t.kind, productId: p.id, qty,
-      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), editedAt: Date.now() };
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), editedAt: Date.now() };
     if (!body.force) {
       const next = all.map((x, i) => (i === idx ? tx : x));
       for (const id of new Set([all[idx].productId, p.id])) {
