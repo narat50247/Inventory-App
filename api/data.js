@@ -16,7 +16,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const txs = await redis.lrange('inv:tx', 0, -1);
-    return res.json({ products, txs });
+    const options = (await redis.get('inv:options')) || { hiddenSpecs: [] };
+    return res.json({ products, txs, options });
   }
 
   if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
@@ -79,6 +80,13 @@ export default async function handler(req, res) {
     }
     await redis.lset('inv:tx', idx, tx);
     return res.json({ tx });
+  }
+
+  if (body.action === 'saveOptions') {
+    const o = body.options || {};
+    const hiddenSpecs = Array.isArray(o.hiddenSpecs) ? [...new Set(o.hiddenSpecs.map((x) => str(x, 80)).filter(Boolean))].slice(0, 500) : [];
+    await redis.set('inv:options', { hiddenSpecs });
+    return res.json({ options: { hiddenSpecs } });
   }
 
   if (body.action === 'deleteTx') {
