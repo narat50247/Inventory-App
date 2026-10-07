@@ -86,18 +86,21 @@ button.s:hover, .bar button:hover { background: #f1f5f9; }
 .login-card h1 { font-size: 24px; line-height: 1.35; margin: 0 0 10px; color: var(--navy); font-weight: 700; }
 .login-sub { margin: 0 0 26px; color: #51606f; font-size: 14.5px; line-height: 1.6; }
 .login-sub b { color: var(--ink); font-weight: 600; }
-.login-card form { display: flex; flex-direction: column; gap: 12px; text-align: left; background: none; border: 0; box-shadow: none; padding: 0; margin: 0; }
+.login-card form { display: flex; flex-direction: column; align-items: stretch; gap: 12px; text-align: left; background: none; border: 0; box-shadow: none; padding: 0; margin: 0; }
 .login-card label { font-size: 15px; font-weight: 600; }
 .pw-wrap { position: relative; }
 .pw-wrap input { width: 100%; font-size: 20px; min-height: 56px; padding: 12px 54px 12px 16px; border: 2px solid #cbd5e1; border-radius: 12px; }
 .pw-wrap input:focus { border-color: var(--navy); box-shadow: 0 0 0 4px rgba(22,57,92,.12); }
 .pw-wrap .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; font-size: 20px; border-radius: 10px; }
 .pw-wrap .eye:hover { background: #eef2f6; }
-.login-card .go { min-height: 56px; border: 0; border-radius: 12px; font: inherit; font-size: 19px; font-weight: 600; color: #fff; cursor: pointer; background: linear-gradient(135deg, #1d5a8a, #16395c); box-shadow: 0 8px 18px rgba(22,57,92,.3); transition: transform .12s, box-shadow .12s; }
+.login-card .go { align-self: center; width: min(100%, 250px); min-height: 48px; border: 0; border-radius: 12px; font: inherit; font-size: 18px; font-weight: 600; color: #fff; cursor: pointer; background: linear-gradient(135deg, #1d5a8a, #16395c); box-shadow: 0 8px 18px rgba(22,57,92,.3); transition: transform .12s, box-shadow .12s; }
 .login-card .go:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(22,57,92,.35); }
 .login-foot { margin-top: 22px; font-size: 12.5px; color: #8392a1; }
 .err { color: var(--danger); font-size: 14px; min-height: 1.4em; }
 .opt-bar { margin: 0 0 12px; }
+.img-field { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.img-field label { flex: 1; min-width: 220px; }
+label small { color: #51606f; }
 #opt { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
 
 [hidden] { display: none !important; }
@@ -179,7 +182,6 @@ const MODEL_ORDER = [
   'ย่ามนำจ่าย "แบบ ก. - ปี 66"',
   'ย่ามนำจ่าย "ฝาครอบ - ปี 66"',
   'ย่ามนำจ่าย "ตาข่าย - ปี 66"',
-  'ย่ามสะพาย',
   'ตะแกรงครอบท่อไอเสีย'
 ];
 const normSpec = s => String(s || '').replace(/["'“”\s]/g, '').toUpperCase();
@@ -370,14 +372,16 @@ function exportCsv() {
 
 /* 2. Transaction View (เรียงจาก วันเก่า -> วันใหม่) */
 function vTx() {
-  const prodOptions = S.products.map(p => `<option value="${esc(pn(p))}">`).join('');
   const editingTx = S.editingTxId ? S.txs.find(t => t.id === S.editingTxId) : null;
-  
+  const ep = editingTx ? S.products.find(p => p.id === editingTx.productId) : null;
+  const typeOpts = allTypes().filter(t => S.products.some(p => p.type === t))
+    .map(t => `<option value="${esc(t)}" ${ep && ep.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('');
+
   const form = canEdit() ? `
     <form id="tf" onsubmit="saveTx(event)">
       <h2>${editingTx ? '✏️ แก้ไขรายการ รับเข้า/จ่ายออก' : '➕ บันทึก รับเข้า / จ่ายออก'}</h2>
       <input type="hidden" name="txId" value="${editingTx ? editingTx.id : ''}">
-      
+
       <div class="seg-group">
         <label class="seg-btn in-btn ${(!editingTx || editingTx.kind === 'in') ? 'active' : ''}" onclick="selectKind('in')">
           <input type="radio" name="kind" value="in" ${(!editingTx || editingTx.kind === 'in') ? 'checked' : ''}> 📥 รับเข้าสินค้า
@@ -388,22 +392,79 @@ function vTx() {
       </div>
 
       <label>วันที่<input name="date" type="date" value="${editingTx ? editingTx.date : today()}" required></label>
-      <label>สินค้า<input name="prod" list="pl" placeholder="พิมพ์ชื่อเพื่อค้นหา" value="${editingTx ? esc(pn(S.products.find(p=>p.id===editingTx.productId))) : ''}" required autocomplete="off"></label>
-      <datalist id="pl">${prodOptions}</datalist>
+      <label>ประเภทสินค้า
+        <select name="ptype" onchange="syncTxSpec()" required>
+          <option value="">— เลือกประเภท —</option>${typeOpts}
+        </select>
+      </label>
+      <label>size / แบบ
+        <select name="pspec" onchange="showStock()" required><option value="">— เลือกประเภทก่อน —</option></select>
+        <small id="stk"></small>
+      </label>
 
       <label>จำนวน<input name="qty" type="number" min="1" step="1" value="${editingTx ? editingTx.qty : ''}" required></label>
       <label>เลขที่ส่งของ / เอกสาร<input name="docNo" value="${editingTx ? esc(editingTx.docNo) : ''}"></label>
       <label>ผู้ส่ง / ผู้รับ<input name="party" value="${editingTx ? esc(editingTx.party) : ''}"></label>
       <label>หมายเหตุ<input name="note" value="${editingTx ? esc(editingTx.note) : ''}"></label>
-      
+
+      <div class="img-field">
+        <label>แนบรูปภาพ (ถ้ามี)<input type="file" accept="image/*" onchange="pickTxImg(this)"></label>
+        <input type="hidden" name="image" value="${editingTx ? esc(editingTx.image || '') : ''}">
+        <div id="tip">${editingTx && editingTx.image ? txImgHtml(editingTx.image) : ''}</div>
+      </div>
+
       <div style="display:flex;gap:8px;grid-column:1/-1;">
         <button type="submit" class="p" style="flex:1;">${editingTx ? 'บันทึกการแก้ไข' : 'บันทึกรายการ'}</button>
         ${editingTx ? `<button type="button" onclick="cancelEditTx()">ยกเลิก</button>` : ''}
       </div>
     </form>` : '';
 
-  $('#v').innerHTML = form + `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()"></div><div id="r"></div>`;
+  $('#v').innerHTML = form +
+    `<input type="file" id="qa" accept="image/*" hidden onchange="quickAttach(this)">` +
+    `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()"><button type="button" onclick="exportTxExcel()">📥 Export Excel</button></div><div id="r"></div>`;
+  if (canEdit() && ep) syncTxSpec(ep.id);
   drawTx();
+}
+
+// dropdown size/แบบ ผูกกับประเภทที่เลือก (ดึงจากรายการสินค้าจริง)
+function syncTxSpec(selectedId) {
+  const f = $('#tf'), t = f.ptype.value;
+  const list = S.products.filter(p => p.type === t).sort(bySpec);
+  f.pspec.innerHTML = `<option value="">${t ? '— เลือก size / แบบ —' : '— เลือกประเภทก่อน —'}</option>` +
+    list.map(p => `<option value="${esc(p.id)}">${esc(getItemSpec(p) || 'ไม่ระบุ')}</option>`).join('');
+  if (selectedId) f.pspec.value = selectedId;
+  showStock();
+}
+function showStock() {
+  const f = $('#tf'), id = f.pspec.value;
+  $('#stk').textContent = id ? `คงเหลือปัจจุบัน: ${bal()[id] || 0}` : '';
+}
+
+const txImgHtml = u => u ? `<a href="${esc(u)}" target="_blank" rel="noopener"><img class="th" src="${esc(u)}" alt="รูปแนบ"></a> <button type="button" class="s" onclick="clearTxImg()">ลบรูป</button>` : '';
+async function pickTxImg(inp) {
+  const f = $('#tf'), st = $('#tip'), file = inp.files[0]; if (!file) return;
+  st.style.color = ''; st.textContent = 'กำลังอัปโหลดรูปภาพ...';
+  try {
+    const url = await uploadImage(file, 1000);
+    f.image.value = url;
+    st.innerHTML = txImgHtml(url) + ' <small>กด "บันทึก" เพื่อบันทึกรูปกับรายการนี้</small>';
+  } catch (e) { st.style.color = 'var(--danger)'; st.textContent = '❌ ' + e.message; }
+  inp.value = '';
+}
+function clearTxImg() { $('#tf').image.value = ''; $('#tip').innerHTML = ''; }
+
+// แนบรูปภายหลังจากปุ่มในตาราง
+let attachId = null;
+function attachTx(id) { attachId = id; $('#qa').click(); }
+async function quickAttach(inp) {
+  const file = inp.files[0], t = S.txs.find(x => x.id === attachId); inp.value = '';
+  if (!file || !t) return;
+  try {
+    const url = await uploadImage(file, 1000);
+    const d = await api('data', { action: 'editTx', force: true, tx: { ...t, image: url } });
+    S.txs = S.txs.map(x => x.id === t.id ? d.tx : x);
+    drawTx();
+  } catch (e) { alert(e.message); }
 }
 
 function selectKind(k) {
@@ -423,21 +484,23 @@ function sortTx(k) {
 function txGo(p) { S.txPage = p; drawTx(); }
 function txSize(n) { S.txSize = +n; S.txPage = 1; drawTx(); }
 
-function drawTx() {
+function txRows() {
   const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
   const q = ($('#q')?.value || '').toLowerCase();
   const { k, dir } = S.txSort;
   const val = x => k === 'qty' ? x.t.qty : k === 'name' ? x.name : k === 'date' ? x.t.date : String(x.t[k] || '');
-
-  // ค่าเริ่มต้น: วันที่ล่าสุดขึ้นก่อน
-  const all = S.txs.map(t => ({ t, name: byId[t.productId] ? pn(byId[t.productId]) : '(สินค้าถูกลบ)' }))
+  return S.txs.map(t => { const p = byId[t.productId]; return { t, p, name: p ? pn(p) : '(สินค้าถูกลบ)' }; })
     .filter(({ t, name }) => [name, t.docNo, t.party, t.note].join(' ').toLowerCase().includes(q))
     .sort((a, c) => {
       const x = val(a), y = val(c);
       const r = typeof x === 'number' ? x - y : x.localeCompare(y, 'th', { numeric: true });
       return (r || a.t.date.localeCompare(c.t.date) || (a.t.at || 0) - (c.t.at || 0)) * dir;
     });
+}
 
+function drawTx() {
+  const { k, dir } = S.txSort;
+  const all = txRows();
   const size = S.txSize || all.length || 1;
   const pages = Math.max(1, Math.ceil(all.length / size));
   S.txPage = Math.min(Math.max(1, S.txPage), pages);
@@ -446,15 +509,18 @@ function drawTx() {
   const rows = slice.map(({ t, name }) => {
     const isIn = t.kind === 'in';
     const badgeHtml = `<span class="badge ${isIn ? 'badge-in' : 'badge-out'}">${isIn ? '📥 รับเข้า' : '📤 จ่ายออก'}</span>`;
+    const imgCell = t.image
+      ? { h: `<a href="${esc(t.image)}" target="_blank" rel="noopener"><img class="th" src="${esc(t.image)}" alt="รูปแนบ" loading="lazy"></a>` }
+      : canEdit() ? { h: `<button class="s" onclick="attachTx('${t.id}')">📎 แนบรูป</button>` } : '-';
     const actions = canEdit() ? {
       h: `<button class="s" onclick="editTx('${t.id}')">แก้ไข</button> <button class="s" onclick="delTx('${t.id}')" style="color:var(--danger)">ลบ</button>`
     } : '';
-    return { cls: isIn ? 'tx-in' : 'tx-out', data: [thDate(t.date), { h: badgeHtml }, name, t.qty, t.docNo || '-', t.party || '-', t.note || '-', actions] };
+    return { cls: isIn ? 'tx-in' : 'tx-out', data: [thDate(t.date), { h: badgeHtml }, name, t.qty, t.docNo || '-', t.party || '-', t.note || '-', imgCell, actions] };
   });
 
   const heads = [...TX_COLS.map(([key, label]) => ({
     h: `<span class="sortable" onclick="sortTx('${key}')">${label}${k === key ? (dir > 0 ? ' ▲' : ' ▼') : ' <span style="opacity:.3">↕</span>'}</span>`
-  })), 'จัดการ'];
+  })), 'รูป', 'จัดการ'];
 
   const pager = `<div class="pager"><span>ทั้งหมด ${all.length} รายการ</span>
     <span><button class="s" ${S.txPage <= 1 ? 'disabled' : ''} onclick="txGo(${S.txPage - 1})">‹ ก่อนหน้า</button>
@@ -464,6 +530,32 @@ function drawTx() {
       <select onchange="txSize(this.value)">${[25, 50, 100, 0].map(n => `<option value="${n}" ${S.txSize === n ? 'selected' : ''}>${n || 'ทั้งหมด'}</option>`).join('')}</select></label></div>`;
 
   $('#r').innerHTML = pager + tbl(heads, rows) + pager;
+}
+
+// ---- Export Excel (.xlsx): ส่งออกทุกรายการที่ตรงกับคำค้น เรียงตามที่เห็นบนหน้าจอ ----
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, no) => {
+    const el = document.createElement('script');
+    el.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    el.onload = ok; el.onerror = no; document.head.appendChild(el);
+  });
+}
+async function exportTxExcel() {
+  const all = txRows();
+  if (!all.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  try { await loadXlsx(); } catch { return alert('โหลดตัวสร้างไฟล์ Excel ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
+  const fmt = d => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${+y + 543}`; };
+  const rows = all.map(({ t, p }) => ({
+    'วันที่': fmt(t.date), 'ประเภท': t.kind === 'in' ? 'รับเข้า' : 'จ่ายออก',
+    'หมวดสินค้า': p ? p.type : '(สินค้าถูกลบ)', 'size / แบบ': p ? getItemSpec(p) : '',
+    'จำนวน': t.qty, 'เลขที่ส่งของ': t.docNo || '', 'ผู้ส่ง/ผู้รับ': t.party || '', 'หมายเหตุ': t.note || '', 'ลิงก์รูปภาพ': t.image || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 28 }, { wch: 9 }, { wch: 18 }, { wch: 28 }, { wch: 24 }, { wch: 34 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'รับเข้า-จ่ายออก');
+  XLSX.writeFile(wb, `รับเข้า-จ่ายออก_${today()}.xlsx`);
 }
 
 function editTx(id) {
@@ -480,10 +572,9 @@ function cancelEditTx() {
 async function saveTx(ev, force) {
   if (ev) ev.preventDefault();
   const f = $('#tf');
-  const prodName = f.prod.value.trim();
-  const p = S.products.find(x => pn(x) === prodName);
-  if (!p) return alert('ไม่พบสินค้านี้ กรุณาเลือกจากรายการดรอปดาวน์ หรือเพิ่มรายการใหม่ในหน้า "รายการสินค้า"');
-  
+  const p = S.products.find(x => x.id === f.pspec.value);
+  if (!p) return alert('กรุณาเลือกประเภทสินค้า และ size / แบบ');
+
   const kindVal = f.querySelector('input[name="kind"]:checked')?.value || 'in';
   const tx = {
     id: f.txId.value || undefined,
@@ -493,7 +584,8 @@ async function saveTx(ev, force) {
     qty: +f.qty.value,
     docNo: f.docNo.value,
     party: f.party.value,
-    note: f.note.value
+    note: f.note.value,
+    image: f.image.value
   };
 
   const action = tx.id ? 'editTx' : 'addTx';
@@ -612,20 +704,25 @@ async function setSpecHidden(s, hide) {
   } catch (e) { alert(e.message); }
 }
 
+async function uploadImage(file, maxPx = 800) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); }
+  catch { throw new Error('เบราว์เซอร์อ่านไฟล์รูปนี้ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG'); }
+  const k = Math.min(1, maxPx / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  const d = await api('upload', { dataUrl: c.toDataURL('image/jpeg', .8) });
+  return d.url;
+}
+
 async function pickImg(inp) {
   const file = inp.files[0]; if (!file) return;
   const st = $('#ip');
   st.style.color = ''; st.textContent = 'กำลังอัปโหลดรูปภาพ...';
   try {
-    let bmp;
-    try { bmp = await createImageBitmap(file); }
-    catch { throw new Error('เบราว์เซอร์อ่านไฟล์รูปนี้ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG'); }
-    const k = Math.min(1, 800 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    const d = await api('upload', { dataUrl: c.toDataURL('image/jpeg', .8) });
-    $('#pf').image.value = d.url;
-    st.innerHTML = `<img class="th" src="${esc(d.url)}" alt=""> <small>อัปโหลดแล้ว กด "บันทึกรายการสินค้า" เพื่อบันทึก</small>`;
+    const url = await uploadImage(file, 800);
+    $('#pf').image.value = url;
+    st.innerHTML = `<img class="th" src="${esc(url)}" alt=""> <small>อัปโหลดแล้ว กด "บันทึกรายการสินค้า" เพื่อบันทึก</small>`;
   } catch (e) { st.style.color = 'var(--danger)'; st.textContent = '❌ ' + e.message; }
   inp.value = '';
 }
