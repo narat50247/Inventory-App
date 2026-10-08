@@ -8,19 +8,37 @@ const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const spec = (p) => { const s = p.size || p.model || ''; return s === 'ไม่ระบุ / -' ? '' : s; };
 const sorted = (products) => [...products].sort((a, b) => (a.type + spec(a)).localeCompare(b.type + spec(b), 'th', { numeric: true }));
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // เรียกโมเดลแบบ OpenAI-compatible (/chat/completions)
-async function chat({ base, key, model }, messages, max = 2000) {
-  const r = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, messages, temperature: 0, max_tokens: max }),
-    signal: AbortSignal.timeout(55000),
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`AI ตอบกลับผิดพลาด: ${j.error?.message || j.error || 'รหัส ' + r.status}`);
-  const text = j.choices?.[0]?.message?.content;
-  if (typeof text !== 'string') throw new Error('AI ไม่ได้ส่งคำตอบกลับมา');
-  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+// timeout = เวลารวมสูงสุดของขั้นนี้ (วินาที), label = ชื่อขั้นตอน ใช้แสดงในข้อความผิดพลาด
+async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, label = 'AI' } = {}) {
+  const t0 = Date.now();
+  for (let attempt = 0; ; attempt++) {
+    const left = Math.max(5, timeout - (Date.now() - t0) / 1000);
+    let r;
+    try {
+      r = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages, temperature: 0, max_tokens: max }),
+        signal: AbortSignal.timeout(left * 1000),
+      });
+    } catch (e) {
+      if (e.name === 'TimeoutError' || e.name === 'AbortError')
+        throw new Error(`${label} ใช้เวลานานเกิน ${timeout} วินาที (ผู้ให้บริการอาจช้าหรือติดโควตา) กรุณาลองใหม่อีกครั้ง`);
+      throw new Error(`${label}: เชื่อมต่อไม่สำเร็จ (${e.message})`);
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if ([429, 502, 503, 504].includes(r.status) && attempt === 0 && Date.now() - t0 < 15000) { await sleep(2000); continue; }
+      const why = j.error?.message || (typeof j.error === 'string' ? j.error : '') || `รหัส ${r.status}`;
+      throw new Error(`${label}: ผู้ให้บริการตอบกลับผิดพลาด (${why})`);
+    }
+    const text = j.choices?.[0]?.message?.content;
+    if (typeof text !== 'string') throw new Error(`${label}: AI ไม่ได้ส่งคำตอบกลับมา`);
+    return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  }
 }
 
 function extractJson(text) {
@@ -67,27 +85,29 @@ export default async function handler(req, res) {
 ตารางสินค้าคงเหลือ:
 ${table}` },
         { role: 'user', content: question },
-      ], 800);
+      ], { max: 800, timeout: 50, label: 'โมเดลข้อความ' });
       return res.json({ answer });
     }
 
-    // ---------- แยกรายการรับ/จ่ายจากข้อความ หรือจากรูปใบส่งของ ----------
+    // ---------- ขั้นที่ 1 (เฉพาะรูป): อ่านข้อความจากรูปใบส่งของ ----------
+    if (body.action === 'ocr') {
+      if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
+      if (!AI_VISION_MODEL) return fail(res, 500, 'ยังไม่ได้ตั้งค่าโมเดลอ่านรูป (ต้องมี AI_VISION_MODEL ใน Vercel Environment Variables)');
+      if (!/^data:image\/jpeg;base64,/.test(body.image || '') || body.image.length > 3.5e6) return fail(res, 400, 'ไฟล์รูปไม่ถูกต้อง หรือใหญ่เกินไป');
+      const ocr = await chat({ base: AI_VISION_BASE_URL || AI_BASE_URL, key: AI_VISION_API_KEY || AI_API_KEY, model: AI_VISION_MODEL }, [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'อ่านข้อความทั้งหมดในภาพเอกสารนี้ให้ครบและตรงตามต้นฉบับ รวมถึงตัวเลข วันที่ เลขที่เอกสาร ชื่อหน่วยงาน และรายการในตาราง (ตารางให้เขียนแถวละบรรทัด คั่นคอลัมน์ด้วย |) ห้ามสรุปหรือเดาตัวเลข ถ้าอ่านไม่ออกให้เขียนว่า [อ่านไม่ออก]' },
+          { type: 'image_url', image_url: { url: body.image } },
+        ],
+      }], { max: 3000, timeout: 45, label: 'ขั้นอ่านรูป (โมเดลรูปภาพ)' });
+      return res.json({ ocr });
+    }
+
+    // ---------- ขั้นที่ 2: แยกรายการรับ/จ่ายจากข้อความ (พิมพ์เอง หรือข้อความที่อ่านจากรูป) ----------
     if (body.action === 'parse') {
       if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
-      let source = str(body.text, 8000), ocr = '';
-
-      if (body.image) {
-        if (!AI_VISION_MODEL) return fail(res, 500, 'ยังไม่ได้ตั้งค่าโมเดลอ่านรูป (ต้องมี AI_VISION_MODEL ใน Vercel Environment Variables)');
-        if (!/^data:image\/jpeg;base64,/.test(body.image) || body.image.length > 3.5e6) return fail(res, 400, 'ไฟล์รูปไม่ถูกต้อง หรือใหญ่เกินไป');
-        ocr = await chat({ base: AI_VISION_BASE_URL || AI_BASE_URL, key: AI_VISION_API_KEY || AI_API_KEY, model: AI_VISION_MODEL }, [{
-          role: 'user',
-          content: [
-            { type: 'text', text: 'อ่านข้อความทั้งหมดในภาพเอกสารนี้ให้ครบและตรงตามต้นฉบับ รวมถึงตัวเลข วันที่ เลขที่เอกสาร ชื่อหน่วยงาน และรายการในตาราง (ตารางให้เขียนแถวละบรรทัด คั่นคอลัมน์ด้วย |) ห้ามสรุปหรือเดาตัวเลข ถ้าอ่านไม่ออกให้เขียนว่า [อ่านไม่ออก]' },
-            { type: 'image_url', image_url: { url: body.image } },
-          ],
-        }], 3000);
-        source = ocr.slice(0, 8000);
-      }
+      const source = str(body.text, 8000);
       if (!source) return fail(res, 400, 'ไม่มีข้อความให้แยกรายการ');
 
       const sortedP = sorted(products);
@@ -109,7 +129,7 @@ ${table}` },
 รายการสินค้า (#เลข | ประเภท | size/แบบ):
 ${list}` },
         { role: 'user', content: source },
-      ], 3000);
+      ], { max: 3000, timeout: 50, label: 'ขั้นแยกรายการ (โมเดลข้อความ)' });
 
       const j = extractJson(out);
       const warnings = (Array.isArray(j.warnings) ? j.warnings : []).map((w) => str(w, 300)).filter(Boolean);
@@ -123,7 +143,7 @@ ${list}` },
         rows.push({ date, kind, productId: p ? p.id : '', qty, docNo: str(r.doc_no, 60), party: str(r.party), note: str(r.note, 300), source: str(r.source, 200) });
       }
       if (!rows.length) warnings.push('AI ไม่พบรายการที่นำมาบันทึกได้ ลองเขียนข้อความให้ชัดเจนขึ้น');
-      return res.json({ rows, warnings, ocr });
+      return res.json({ rows, warnings });
     }
   } catch (e) {
     return fail(res, 502, e.message || 'เรียก AI ไม่สำเร็จ');
