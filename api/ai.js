@@ -7,12 +7,13 @@ const str = (v, n = 200) => String(v || '').slice(0, n).trim();
 const today = () => new Date(Date.now() + 7 * 36e5).toISOString().slice(0, 10);
 const spec = (p) => { const s = p.size || p.model || ''; return s === 'ไม่ระบุ / -' ? '' : s; };
 const sorted = (products) => [...products].sort((a, b) => (a.type + spec(a)).localeCompare(b.type + spec(b), 'th', { numeric: true }));
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const envJson = (name) => { try { return JSON.parse(process.env[name] || '{}'); } catch { return {}; } };
 
 // เรียกโมเดลแบบ OpenAI-compatible (/chat/completions)
-// timeout = เวลารวมสูงสุดของขั้นนี้ (วินาที), label = ชื่อขั้นตอน ใช้แสดงในข้อความผิดพลาด
-async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, label = 'AI', extra = {} } = {}) {
+// timeout = เวลารวมสูงสุดของขั้นนี้ (วินาที), label = ชื่อขั้นตอน, extra = พารามิเตอร์เสริมของผู้ให้บริการ
+// partial = ยอมรับคำตอบที่ถูกตัด (ใช้กับ OCR ซึ่งเป็นข้อความธรรมดา)
+async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, label = 'AI', extra = {}, partial = false } = {}) {
   const t0 = Date.now();
   for (let attempt = 0; ; attempt++) {
     const left = Math.max(5, timeout - (Date.now() - t0) / 1000);
@@ -36,17 +37,31 @@ async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, 
       const why = String(e0?.error?.message || (typeof e0?.error === 'string' ? e0.error : '') || e0?.message || `รหัส ${r.status}`).slice(0, 200);
       throw new Error(`${label}: ผู้ให้บริการตอบกลับผิดพลาด (รหัส ${r.status}: ${why}) [โมเดล: ${model}]`);
     }
-    const text = j.choices?.[0]?.message?.content;
-    if (typeof text !== 'string') throw new Error(`${label}: AI ไม่ได้ส่งคำตอบกลับมา`);
-    return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+    const ch = j.choices?.[0], msg = ch?.message || {};
+    let text = msg.content;
+    if (Array.isArray(text)) text = text.map((x) => x?.text || '').join('');
+    const cut = ch?.finish_reason === 'length';
+    const unclosedThink = typeof text === 'string' && /<think>/.test(text) && !/<\/think>/.test(text);
+    if (typeof text !== 'string' || !text.trim() || unclosedThink) {
+      throw new Error(cut || msg.reasoning_content || unclosedThink
+        ? `${label}: โมเดลใช้เวลา "คิด" จนคำตอบถูกตัดก่อนเสร็จ (มักเกิดกับโมเดลแบบคิดก่อนตอบเมื่อข้อความยาว) ลองปิดโหมดคิดของโมเดล หรือแบ่งข้อความให้สั้นลง [โมเดล: ${model}]`
+        : `${label}: AI ไม่ได้ส่งคำตอบกลับมา (finish_reason: ${ch?.finish_reason || 'ไม่ทราบ'}) [โมเดล: ${model}]`);
+    }
+    text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    if (cut) {
+      if (!partial) throw new Error(`${label}: คำตอบยาวเกินเพดานจึงถูกตัด ลองแบ่งข้อความให้สั้นลง [โมเดล: ${model}]`);
+      text += '\n[หมายเหตุ: ข้อความถูกตัดเพราะยาวเกินเพดาน อาจไม่ครบ]';
+    }
+    return text;
   }
 }
 
 function extractJson(text) {
+  const bad = 'AI ตอบกลับในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง หรือแบ่งข้อความให้สั้นลง';
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('AI ตอบกลับในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง หรือแบ่งข้อความให้สั้นลง');
-  try { return JSON.parse(text.slice(a, b + 1)); }
-  catch { throw new Error('AI ตอบกลับในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง หรือแบ่งข้อความให้สั้นลง'); }
+  if (a < 0 || b < a) throw new Error(bad);
+  try { return JSON.parse(text.slice(a, b + 1)); } catch { throw new Error(bad); }
 }
 
 export default async function handler(req, res) {
@@ -58,6 +73,12 @@ export default async function handler(req, res) {
   if (!AI_BASE_URL || !AI_API_KEY || !AI_MODEL)
     return fail(res, 500, 'ยังไม่ได้ตั้งค่า AI (ต้องมี AI_BASE_URL, AI_API_KEY, AI_MODEL ใน Vercel Environment Variables)');
   const text = { base: AI_BASE_URL, key: AI_API_KEY, model: AI_MODEL };
+  const vision = { base: AI_VISION_BASE_URL || AI_BASE_URL, key: AI_VISION_API_KEY || AI_API_KEY, model: AI_VISION_MODEL };
+  const textExtra = envJson('AI_TEXT_EXTRA');
+  const visionExtra = { ...envJson('AI_VISION_EXTRA'), ...(process.env.AI_VISION_REASONING_EFFORT ? { reasoning_effort: process.env.AI_VISION_REASONING_EFFORT } : {}) };
+  // ตัวเลือก: ให้โมเดลตัวเดียวกับที่อ่านรูป เป็นตัวแยกรายการด้วย (AI_PARSE_USE_VISION=1)
+  const parseWithVision = process.env.AI_PARSE_USE_VISION === '1' && !!AI_VISION_MODEL;
+  const noThink = !parseWithVision && process.env.AI_TEXT_NO_THINK === '1' ? '\n/no_think' : '';
   const body = req.body || {};
   const products = (await redis.get('inv:products')) || [];
 
@@ -85,8 +106,8 @@ export default async function handler(req, res) {
 
 ตารางสินค้าคงเหลือ:
 ${table}` },
-        { role: 'user', content: question },
-      ], { max: 800, timeout: 50, label: 'โมเดลข้อความ' });
+        { role: 'user', content: question + noThink },
+      ], { max: 1500, timeout: 50, label: 'โมเดลข้อความ', extra: textExtra });
       return res.json({ answer });
     }
 
@@ -95,13 +116,14 @@ ${table}` },
       if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
       if (!AI_VISION_MODEL) return fail(res, 500, 'ยังไม่ได้ตั้งค่าโมเดลอ่านรูป (ต้องมี AI_VISION_MODEL ใน Vercel Environment Variables)');
       if (!/^data:image\/jpeg;base64,/.test(body.image || '') || body.image.length > 3.5e6) return fail(res, 400, 'ไฟล์รูปไม่ถูกต้อง หรือใหญ่เกินไป');
-      const ocr = await chat({ base: AI_VISION_BASE_URL || AI_BASE_URL, key: AI_VISION_API_KEY || AI_API_KEY, model: AI_VISION_MODEL }, [{
+      let ocr = await chat(vision, [{
         role: 'user',
         content: [
-          { type: 'text', text: 'อ่านข้อความทั้งหมดในภาพเอกสารนี้ให้ครบและตรงตามต้นฉบับ รวมถึงตัวเลข วันที่ เลขที่เอกสาร ชื่อหน่วยงาน และรายการในตาราง (ตารางให้เขียนแถวละบรรทัด คั่นคอลัมน์ด้วย |) ห้ามสรุปหรือเดาตัวเลข ถ้าอ่านไม่ออกให้เขียนว่า [อ่านไม่ออก]' },
+          { type: 'text', text: 'อ่านข้อความทั้งหมดในภาพเอกสารนี้ให้ครบและตรงตามต้นฉบับ รวมถึงตัวเลข วันที่ เลขที่เอกสาร ชื่อหน่วยงาน และรายการในตาราง (ตารางให้เขียนแถวละบรรทัด คั่นคอลัมน์ด้วย |) ตอบเป็นข้อความธรรมดา ห้ามใช้ Markdown (ไม่ใช้ ** # หรือเครื่องหมาย * นำหน้าบรรทัด) ห้ามสรุปหรือเดาตัวเลข ถ้าอ่านไม่ออกให้เขียนว่า [อ่านไม่ออก]' },
           { type: 'image_url', image_url: { url: body.image } },
         ],
-      }], { max: 6000, timeout: 45, label: 'ขั้นอ่านรูป (โมเดลรูปภาพ)', extra: process.env.AI_VISION_REASONING_EFFORT ? { reasoning_effort: process.env.AI_VISION_REASONING_EFFORT } : {} });
+      }], { max: 6000, timeout: 45, label: 'ขั้นอ่านรูป (โมเดลรูปภาพ)', extra: visionExtra, partial: true });
+      ocr = ocr.replace(/\*\*/g, '').replace(/^[ \t]*[*•]\s+/gm, '');   // ตัด Markdown ที่หลุดมา ลดความยาวข้อความ
       return res.json({ ocr });
     }
 
@@ -114,23 +136,25 @@ ${table}` },
       const sortedP = sorted(products);
       const byNo = new Map(sortedP.map((p, i) => [i + 1, p]));
       const list = sortedP.map((p, i) => `#${i + 1} | ${p.type} | ${spec(p) || '-'}`).join('\n');
-      const out = await chat(text, [
+      const out = await chat(parseWithVision ? vision : text, [
         { role: 'system', content: `คุณแปลงข้อความ (หรือข้อความที่อ่านจากใบส่งของ/ใบจ่ายของ) เป็นรายการรับเข้า/จ่ายออกของคลังสินค้า
 วันนี้คือ ${today()} (ค.ศ.) เอกสารไทยมักใช้ปี พ.ศ. ให้แปลงเป็น ค.ศ. (ลบ 543)
 กติกา:
-- kind: "in" = รับเข้า (รับ, ได้รับ, รับจาก, นำเข้า) / "out" = จ่ายออก (จ่าย, ส่ง, เบิก, แจก, มอบ)
+- ข้อความอาจมีข้อมูลอื่นที่ไม่เกี่ยวข้อง (เช่น Movement type, รหัสศูนย์ต้นทุน, ราคา, รหัสวัสดุ) ให้ข้ามไป เลือกเฉพาะรายการสินค้ากับจำนวน
+- เลขที่เอกสาร / ผู้ส่ง-ผู้รับ / วันที่ ที่อยู่ส่วนหัวของเอกสาร ให้ใส่ซ้ำในทุกแถวที่เกี่ยวข้อง
+- kind: "in" = รับเข้า (รับ, ได้รับ, รับจาก, นำเข้า) / "out" = จ่ายออก (จ่าย, ส่ง, เบิก, แจก, มอบ, GI)
 - product_no ต้องเลือกจากรายการสินค้าด้านล่างเท่านั้น ถ้าไม่แน่ใจหรือไม่มีในรายการให้ใส่ null ห้ามเดา
 - qty เป็นจำนวนเต็มบวกตามที่ปรากฏในข้อความ ห้ามคำนวณหรือเดาเอง ถ้าอ่านจำนวนไม่ได้ให้ข้ามรายการนั้นและแจ้งใน warnings
-- doc_no = เลขที่เอกสาร/ใบส่งของ, party = ผู้ส่ง/ผู้รับ/หน่วยงาน, note = ข้อมูลอื่นที่เกี่ยวข้อง
+- doc_no = เลขที่เอกสาร/ใบส่งของ, party = ผู้ส่ง/ผู้รับ/หน่วยงาน, note = ข้อมูลอื่นที่เกี่ยวข้อง (สั้นๆ)
 - date รูปแบบ YYYY-MM-DD ถ้าไม่ระบุให้เป็น null
-- source = ข้อความต้นฉบับสั้นๆ ที่ใช้สร้างรายการนั้น
-ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ:
+- source = ข้อความต้นฉบับที่ใช้สร้างรายการนั้น ไม่เกิน 40 ตัวอักษร
+ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น ไม่ต้องอธิบาย รูปแบบ:
 {"rows":[{"date":"YYYY-MM-DD หรือ null","kind":"in หรือ out","product_no":ตัวเลข หรือ null,"qty":ตัวเลข,"doc_no":"","party":"","note":"","source":""}],"warnings":["..."]}
 
 รายการสินค้า (#เลข | ประเภท | size/แบบ):
 ${list}` },
-        { role: 'user', content: source },
-      ], { max: 3000, timeout: 50, label: 'ขั้นแยกรายการ (โมเดลข้อความ)' });
+        { role: 'user', content: source + noThink },
+      ], { max: 8000, timeout: 50, label: 'ขั้นแยกรายการ (โมเดลข้อความ)', extra: parseWithVision ? visionExtra : textExtra });
 
       const j = extractJson(out);
       const warnings = (Array.isArray(j.warnings) ? j.warnings : []).map((w) => str(w, 300)).filter(Boolean);
