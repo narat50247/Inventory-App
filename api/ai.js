@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // เรียกโมเดลแบบ OpenAI-compatible (/chat/completions)
 // timeout = เวลารวมสูงสุดของขั้นนี้ (วินาที), label = ชื่อขั้นตอน ใช้แสดงในข้อความผิดพลาด
-async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, label = 'AI' } = {}) {
+async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, label = 'AI', extra = {} } = {}) {
   const t0 = Date.now();
   for (let attempt = 0; ; attempt++) {
     const left = Math.max(5, timeout - (Date.now() - t0) / 1000);
@@ -21,7 +21,7 @@ async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, 
       r = await fetch(`${base.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, messages, temperature: 0, max_tokens: max }),
+        body: JSON.stringify({ model, messages, temperature: 0, max_tokens: max, ...extra }),
         signal: AbortSignal.timeout(left * 1000),
       });
     } catch (e) {
@@ -32,8 +32,9 @@ async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, 
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
       if ([429, 502, 503, 504].includes(r.status) && attempt === 0 && Date.now() - t0 < 15000) { await sleep(2000); continue; }
-      const why = j.error?.message || (typeof j.error === 'string' ? j.error : '') || `รหัส ${r.status}`;
-      throw new Error(`${label}: ผู้ให้บริการตอบกลับผิดพลาด (${why})`);
+      const e0 = Array.isArray(j) ? j[0] : j;   // Google ตอบ error เป็น array ในบางกรณี
+      const why = String(e0?.error?.message || (typeof e0?.error === 'string' ? e0.error : '') || e0?.message || `รหัส ${r.status}`).slice(0, 200);
+      throw new Error(`${label}: ผู้ให้บริการตอบกลับผิดพลาด (รหัส ${r.status}: ${why}) [โมเดล: ${model}]`);
     }
     const text = j.choices?.[0]?.message?.content;
     if (typeof text !== 'string') throw new Error(`${label}: AI ไม่ได้ส่งคำตอบกลับมา`);
@@ -100,7 +101,7 @@ ${table}` },
           { type: 'text', text: 'อ่านข้อความทั้งหมดในภาพเอกสารนี้ให้ครบและตรงตามต้นฉบับ รวมถึงตัวเลข วันที่ เลขที่เอกสาร ชื่อหน่วยงาน และรายการในตาราง (ตารางให้เขียนแถวละบรรทัด คั่นคอลัมน์ด้วย |) ห้ามสรุปหรือเดาตัวเลข ถ้าอ่านไม่ออกให้เขียนว่า [อ่านไม่ออก]' },
           { type: 'image_url', image_url: { url: body.image } },
         ],
-      }], { max: 3000, timeout: 45, label: 'ขั้นอ่านรูป (โมเดลรูปภาพ)' });
+      }], { max: 6000, timeout: 45, label: 'ขั้นอ่านรูป (โมเดลรูปภาพ)', extra: process.env.AI_VISION_REASONING_EFFORT ? { reasoning_effort: process.env.AI_VISION_REASONING_EFFORT } : {} });
       return res.json({ ocr });
     }
 
