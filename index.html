@@ -643,18 +643,21 @@ async function askAi() {
 
 async function runParse(payload) {
   const out = $('#adraft');
-  out.innerHTML = '<p>AI กำลังอ่านและแยกรายการ... (อาจใช้เวลาสักครู่)</p>';
+  out.innerHTML = '<p>' + (AI.pendingFile ? 'ขั้นที่ 2/2: ' : '') + 'AI กำลังแยกรายการ... (อาจใช้เวลาสักครู่)</p>';
   try {
     const d = await api('ai', { action: 'parse', ...payload });
     AI.rows = d.rows.map(r => ({ ...r, date: r.date || today(), on: true }));
-    AI.warnings = d.warnings || []; AI.ocr = d.ocr || ''; AI.imageUrl = '';
+    AI.warnings = d.warnings || []; AI.imageUrl = '';
     drawDraft();
-  } catch (e) { out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>`; }
+  } catch (e) {
+    out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>` +
+      (AI.pendingFile ? '<p>ข้อความที่อ่านจากรูปอยู่ในช่องด้านบนแล้ว กดปุ่ม "✨ ให้ AI แยกรายการจากข้อความ" เพื่อลองใหม่ได้เลย ไม่ต้องอ่านรูปซ้ำ</p>' : '');
+  }
 }
 function parseAi() {
   const t = $('#atxt').value.trim();
   if (!t) return alert('กรุณาพิมพ์หรือวางข้อความก่อน');
-  AI.pendingFile = null; runParse({ text: t });
+  runParse({ text: t });
 }
 async function fileToJpegDataUrl(file, maxPx) {
   let bmp;
@@ -667,8 +670,14 @@ async function fileToJpegDataUrl(file, maxPx) {
 async function parseAiImage(inp) {
   const file = inp.files[0]; if (!file) return; inp.value = '';
   const out = $('#adraft'); out.innerHTML = '<p>กำลังเตรียมรูป...</p>';
-  try { const dataUrl = await fileToJpegDataUrl(file, 1600); AI.pendingFile = file; await runParse({ image: dataUrl }); }
-  catch (e) { out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>`; }
+  try {
+    const dataUrl = await fileToJpegDataUrl(file, 1600);
+    AI.pendingFile = file; AI.rows = []; AI.warnings = [];
+    out.innerHTML = '<p>ขั้นที่ 1/2: AI กำลังอ่านข้อความจากรูป... (อาจใช้เวลาสักครู่)</p>';
+    const o = await api('ai', { action: 'ocr', image: dataUrl });
+    $('#atxt').value = o.ocr;     // เก็บข้อความที่อ่านได้ไว้ในช่อง แก้ไขได้ และกดแยกรายการซ้ำได้โดยไม่ต้องอ่านรูปใหม่
+    await runParse({ text: o.ocr });
+  } catch (e) { out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>`; }
 }
 
 function drawDraft() {
@@ -686,10 +695,9 @@ function drawDraft() {
     <td><input value="${esc(r.note)}" onchange="AI.rows[${i}].note=this.value"></td></tr>`).join('');
   $('#adraft').innerHTML = `
     ${AI.warnings.length ? `<div class="alert-box warn-box"><b>ข้อควรตรวจ</b><ul>${AI.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
-    ${AI.ocr ? `<details style="margin:8px 0"><summary>ดูข้อความที่ AI อ่านจากรูป</summary><pre class="ai-ocr">${esc(AI.ocr)}</pre></details>` : ''}
     ${AI.rows.length ? `<p style="margin:10px 0 4px"><b>ร่างรายการ</b> ตรวจและแก้ไขได้ก่อนบันทึก ช่องสีแดงคือยังไม่ได้เลือกสินค้า</p>
     <div class="tw"><table class="draft"><tr><th></th><th>วันที่</th><th>ประเภท</th><th>สินค้า</th><th>จำนวน</th><th>เลขที่</th><th>ผู้ส่ง/ผู้รับ</th><th>หมายเหตุ</th></tr>${rows}</table></div>
-    ${AI.pendingFile ? '<label style="flex-direction:row;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" id="aatt" checked style="min-height:0"> แนบรูปใบเอกสารนี้กับทุกรายการที่บันทึก</label>' : ''}
+    ${AI.pendingFile ? '<label style="flex-direction:row;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" id="aatt" checked style="min-height:0"> แนบรูปใบเอกสารนี้ (' + esc(AI.pendingFile.name || 'รูปที่เลือก') + ') กับทุกรายการที่บันทึก</label>' : ''}
     <button type="button" class="p" id="asave" onclick="saveDraft()" style="margin-top:8px">✅ บันทึก ${AI.rows.filter(r => r.on).length} รายการ</button>` : ''}`;
 }
 function updDraftBtn() { const b = $('#asave'); if (b) b.textContent = `✅ บันทึก ${AI.rows.filter(r => r.on).length} รายการ`; }
