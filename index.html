@@ -116,6 +116,15 @@ label small { color: #51606f; }
 .alert-box { border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
 .alert-box ul { margin: 6px 0 2px; padding-left: 20px; }
 .err-box { background: #fdecec; border: 1px solid #e3a5a5; } .warn-box { background: #fff8e6; border: 1px solid #f0d28a; }
+.ai-box { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.ai-box h2 { margin: 0 0 8px; font-size: 17px; }
+.ai-box textarea { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid #aab4be; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box; }
+.ai-ans { background: #f3f7fb; border-left: 4px solid var(--navy); padding: 10px 12px; margin-top: 8px; white-space: pre-wrap; border-radius: 4px; }
+.s-btn { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font: inherit; padding: 8px 14px; border: 1px solid #aab4be; border-radius: 4px; background: #fff; color: var(--ink); cursor: pointer; }
+table.draft td { padding: 4px; vertical-align: top; } table.draft input, table.draft select { min-height: 32px; padding: 4px 6px; max-width: 220px; }
+select.need { border-color: #c62828; background: #fdecec; }
+.src { font-size: 12px; color: #64748b; margin-top: 2px; }
+.ai-ocr { white-space: pre-wrap; background: #f6f8fa; padding: 8px; border-radius: 4px; font-size: 13px; max-height: 240px; overflow: auto; }
 #opt { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
 
 [hidden] { display: none !important; }
@@ -308,9 +317,10 @@ function render() {
   const tabs = [
     ['report', '📦 สินค้าคงเหลือ'],
     ['tx', '🔄 รับเข้า/จ่ายออก'],
-    ['items', '📝 รายการสินค้า']
+    ['ai', '🤖 ผู้ช่วย AI']
   ];
-  if (canEdit()) tabs.push(['import', '📥 นำเข้าข้อมูล']);
+  if (canEdit()) tabs.push(['items', '📝 รายการสินค้า'], ['import', '📥 นำเข้าข้อมูล']);
+  if (!tabs.some(([k]) => k === S.tab)) S.tab = 'report';   // กันกรณีค้างอยู่ในแท็บที่ไม่มีสิทธิ์
 
   $('#app').innerHTML = `
     <header>
@@ -320,7 +330,7 @@ function render() {
     </header>
     <main id="v"></main>`;
 
-  const views = { report: vReport, tx: vTx, items: vItems, import: vImport };
+  const views = { report: vReport, tx: vTx, ai: vAi, items: vItems, import: vImport };
   if (views[S.tab]) views[S.tab]();
 }
 
@@ -460,7 +470,7 @@ function vTx() {
 
   $('#v').innerHTML = form +
     `<input type="file" id="qa" accept="image/*" hidden onchange="quickAttach(this)">` +
-    `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()"><button type="button" onclick="exportTxExcel()">📥 Export Excel</button>${canEdit() ? '<button type="button" onclick="toggleXl()">📤 อัปเดตจาก Excel</button>' : ''}</div>${canEdit() ? '<div id="xl" class="xl-panel" hidden></div>' : ''}<div id="r"></div>`;
+    `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()">${canEdit() ? '<button type="button" onclick="exportTxExcel()">📥 Export Excel</button><button type="button" onclick="toggleXl()">📤 อัปเดตจาก Excel</button>' : ''}</div>${canEdit() ? '<div id="xl" class="xl-panel" hidden></div>' : ''}<div id="r"></div>`;
   if (canEdit() && ep) syncTxSpec(ep.id);
   drawTx();
 }
@@ -581,6 +591,7 @@ function loadXlsx() {
   });
 }
 async function exportTxExcel() {
+  if (!canEdit()) return;
   const all = txRows();
   if (!all.length) return alert('ไม่มีข้อมูลให้ส่งออก');
   try { await loadXlsx(); } catch { return alert('โหลดตัวสร้างไฟล์ Excel ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
@@ -603,6 +614,103 @@ async function exportTxExcel() {
     ['5. อัปโหลดที่แท็บ รับเข้า/จ่ายออก ปุ่ม "อัปเดตจาก Excel" (แนะนำให้ Export โดยไม่ใส่คำค้น เพื่อได้ครบทุกรายการ)']
   ]), 'วิธีใช้');
   XLSX.writeFile(wb, `รับเข้า-จ่ายออก_${today()}.xlsx`);
+}
+
+// ===== ผู้ช่วย AI: ถามยอดคงเหลือ / แยกรายการจากข้อความหรือรูปใบส่งของ =====
+let AI = { rows: [], ocr: '', warnings: [], pendingFile: null, imageUrl: '' };
+
+function vAi() {
+  const e = canEdit();
+  $('#v').innerHTML = `
+    <div class="ai-box"><h2>💬 ถามยอดคงเหลือ</h2>
+      <div class="bar" style="margin-top:0"><input id="aq" placeholder="เช่น แจ๊คเก็ตปฏิบัติการ XL เหลือเท่าไร" onkeydown="if(event.key==='Enter')askAi()"><button type="button" class="p" id="abtn" onclick="askAi()">ถาม</button></div>
+      <div id="aans" class="ai-ans" hidden></div></div>
+    ${e ? `<div class="ai-box"><h2>📝 บันทึกรายการด้วย AI</h2>
+      <textarea id="atxt" rows="5" placeholder="พิมพ์หรือวางข้อความ เช่น: วันที่ 7/10/69 รับเข้า แจ๊คเก็ตดำ-แดง M 20 ตัว L 30 ตัว จากคลังกลาง เลขที่ 123/69"></textarea>
+      <div class="bar" style="margin:0;flex-wrap:wrap"><button type="button" class="p" onclick="parseAi()">✨ ให้ AI แยกรายการจากข้อความ</button>
+        <label class="s-btn">📷 ถ่าย/เลือกรูปใบส่งของ<input type="file" accept="image/*" hidden onchange="parseAiImage(this)"></label></div>
+      <div id="adraft"></div></div>` : ''}`;
+}
+
+async function askAi() {
+  const q = $('#aq').value.trim(); if (!q) return;
+  const box = $('#aans'), btn = $('#abtn');
+  box.hidden = false; box.textContent = 'กำลังหาคำตอบ...'; btn.disabled = true;
+  try { box.textContent = (await api('ai', { action: 'ask', question: q })).answer; }
+  catch (e) { box.textContent = '❌ ' + e.message; }
+  btn.disabled = false;
+}
+
+async function runParse(payload) {
+  const out = $('#adraft');
+  out.innerHTML = '<p>AI กำลังอ่านและแยกรายการ... (อาจใช้เวลาสักครู่)</p>';
+  try {
+    const d = await api('ai', { action: 'parse', ...payload });
+    AI.rows = d.rows.map(r => ({ ...r, date: r.date || today(), on: true }));
+    AI.warnings = d.warnings || []; AI.ocr = d.ocr || ''; AI.imageUrl = '';
+    drawDraft();
+  } catch (e) { out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>`; }
+}
+function parseAi() {
+  const t = $('#atxt').value.trim();
+  if (!t) return alert('กรุณาพิมพ์หรือวางข้อความก่อน');
+  AI.pendingFile = null; runParse({ text: t });
+}
+async function fileToJpegDataUrl(file, maxPx) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw new Error('เบราว์เซอร์อ่านไฟล์รูปนี้ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG'); }
+  const k = Math.min(1, maxPx / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', .85);
+}
+async function parseAiImage(inp) {
+  const file = inp.files[0]; if (!file) return; inp.value = '';
+  const out = $('#adraft'); out.innerHTML = '<p>กำลังเตรียมรูป...</p>';
+  try { const dataUrl = await fileToJpegDataUrl(file, 1600); AI.pendingFile = file; await runParse({ image: dataUrl }); }
+  catch (e) { out.innerHTML = `<p class="low">❌ ${esc(e.message)}</p>`; }
+}
+
+function drawDraft() {
+  const types = allTypes().filter(t => S.products.some(p => p.type === t));
+  const opts = sel => '<option value="">— เลือกสินค้า —</option>' + types.map(t =>
+    `<optgroup label="${esc(t)}">${S.products.filter(p => p.type === t).sort(bySpec).map(p => `<option value="${esc(p.id)}" ${p.id === sel ? 'selected' : ''}>${esc(getItemSpec(p) || 'ไม่ระบุ')}</option>`).join('')}</optgroup>`).join('');
+  const rows = AI.rows.map((r, i) => `<tr class="${r.kind === 'in' ? 'tx-in' : 'tx-out'}">
+    <td><input type="checkbox" ${r.on ? 'checked' : ''} onchange="AI.rows[${i}].on=this.checked;updDraftBtn()"></td>
+    <td><input type="date" value="${esc(r.date)}" onchange="AI.rows[${i}].date=this.value"></td>
+    <td><select onchange="AI.rows[${i}].kind=this.value;drawDraft()"><option value="in" ${r.kind === 'in' ? 'selected' : ''}>รับเข้า</option><option value="out" ${r.kind === 'out' ? 'selected' : ''}>จ่ายออก</option></select></td>
+    <td><select class="${r.productId ? '' : 'need'}" onchange="AI.rows[${i}].productId=this.value;this.classList.toggle('need',!this.value)">${opts(r.productId)}</select><div class="src">${esc(r.source)}</div></td>
+    <td><input type="number" min="1" step="1" value="${r.qty}" style="width:72px" onchange="AI.rows[${i}].qty=+this.value"></td>
+    <td><input value="${esc(r.docNo)}" onchange="AI.rows[${i}].docNo=this.value"></td>
+    <td><input value="${esc(r.party)}" onchange="AI.rows[${i}].party=this.value"></td>
+    <td><input value="${esc(r.note)}" onchange="AI.rows[${i}].note=this.value"></td></tr>`).join('');
+  $('#adraft').innerHTML = `
+    ${AI.warnings.length ? `<div class="alert-box warn-box"><b>ข้อควรตรวจ</b><ul>${AI.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
+    ${AI.ocr ? `<details style="margin:8px 0"><summary>ดูข้อความที่ AI อ่านจากรูป</summary><pre class="ai-ocr">${esc(AI.ocr)}</pre></details>` : ''}
+    ${AI.rows.length ? `<p style="margin:10px 0 4px"><b>ร่างรายการ</b> ตรวจและแก้ไขได้ก่อนบันทึก ช่องสีแดงคือยังไม่ได้เลือกสินค้า</p>
+    <div class="tw"><table class="draft"><tr><th></th><th>วันที่</th><th>ประเภท</th><th>สินค้า</th><th>จำนวน</th><th>เลขที่</th><th>ผู้ส่ง/ผู้รับ</th><th>หมายเหตุ</th></tr>${rows}</table></div>
+    ${AI.pendingFile ? '<label style="flex-direction:row;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" id="aatt" checked style="min-height:0"> แนบรูปใบเอกสารนี้กับทุกรายการที่บันทึก</label>' : ''}
+    <button type="button" class="p" id="asave" onclick="saveDraft()" style="margin-top:8px">✅ บันทึก ${AI.rows.filter(r => r.on).length} รายการ</button>` : ''}`;
+}
+function updDraftBtn() { const b = $('#asave'); if (b) b.textContent = `✅ บันทึก ${AI.rows.filter(r => r.on).length} รายการ`; }
+
+async function saveDraft(force) {
+  const sel = AI.rows.filter(r => r.on);
+  if (!sel.length) return alert('ยังไม่ได้เลือกรายการที่จะบันทึก');
+  if (sel.some(r => !r.productId || !(r.qty >= 1) || !r.date)) return alert('มีรายการที่ยังไม่ได้เลือกสินค้า หรือจำนวน/วันที่ไม่ถูกต้อง (ช่องสีแดง)');
+  if (AI.pendingFile && $('#aatt')?.checked && !AI.imageUrl) {
+    try { AI.imageUrl = await uploadImage(AI.pendingFile, 1000); }
+    catch (e) { if (!confirm('แนบรูปไม่สำเร็จ: ' + e.message + '\nต้องการบันทึกรายการโดยไม่แนบรูปหรือไม่?')) return; }
+  }
+  try {
+    const d = await api('data', { action: 'addTxs', force, txs: sel.map(r => ({ date: r.date, kind: r.kind, productId: r.productId, qty: r.qty, docNo: r.docNo, party: r.party, note: r.note, image: AI.imageUrl })) });
+    S.txs.push(...d.txs); S.txPage = 1;
+    AI = { rows: [], ocr: '', warnings: [], pendingFile: null, imageUrl: '' };
+    alert(`บันทึกแล้ว ${d.txs.length} รายการ`); vAi();
+  } catch (e) {
+    if (e.data && e.data.short) { if (confirm(e.message + '\nต้องการบันทึกต่อหรือไม่?')) saveDraft(true); }
+    else alert(e.message);
+  }
 }
 
 // ===== อัปเดตข้อมูลจากไฟล์ Excel ที่ export ออกมา (แก้แล้วอัปโหลดกลับ) =====
