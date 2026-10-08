@@ -159,6 +159,26 @@ export default async function handler(req, res) {
     return res.json({ products, txs: final });
   }
 
+  if (body.action === 'addTxs') {
+    const list = Array.isArray(body.txs) ? body.txs.slice(0, 200) : [];
+    if (!list.length) return fail(res, 400, 'ไม่มีรายการให้บันทึก');
+    const bal = new Map();
+    for (const t of await redis.lrange('inv:tx', 0, -1)) bal.set(t.productId, (bal.get(t.productId) || 0) + (t.kind === 'in' ? t.qty : -t.qty));
+    const out = [], short = [], now = Date.now();
+    for (const [i, t] of list.entries()) {
+      const qty = Number(t.qty), p = products.find((x) => x.id === t.productId);
+      if (!validTx(t, p, qty)) return fail(res, 400, `รายการที่ ${i + 1} ข้อมูลไม่ครบหรือไม่ถูกต้อง ไม่มีการบันทึกใดๆ`);
+      const cur = bal.get(p.id) || 0, next = cur + (t.kind === 'in' ? qty : -qty);
+      if (t.kind === 'out' && next < 0) short.push(`${[p.type, p.size || p.model].filter(Boolean).join(' ')} (เหลือ ${cur}, จ่าย ${qty})`);
+      bal.set(p.id, next);
+      out.push({ id: randomUUID(), date: t.date, kind: t.kind, productId: p.id, qty,
+        docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), at: now + i });
+    }
+    if (short.length && !body.force) return fail(res, 409, 'ยอดคงเหลือไม่พอ: ' + short.join(', '), { short: true });
+    await redis.rpush('inv:tx', ...out);
+    return res.json({ txs: out });
+  }
+
   if (body.action === 'deleteTx') {
     const all = await redis.lrange('inv:tx', 0, -1);
     const found = all.find((t) => t.id === body.id);
