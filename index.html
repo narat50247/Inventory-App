@@ -125,6 +125,24 @@ table.draft td { padding: 4px; vertical-align: top; } table.draft input, table.d
 select.need { border-color: #c62828; background: #fdecec; }
 .src { font-size: 12px; color: #64748b; margin-top: 2px; }
 .ai-ocr { white-space: pre-wrap; background: #f6f8fa; padding: 8px; border-radius: 4px; font-size: 13px; max-height: 240px; overflow: auto; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+.kpi { background: #fff; border: 1px solid var(--line); border-left: 5px solid #8a97a5; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; }
+.kpi span { font-size: 13px; color: #51606f; } .kpi b { font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi.in { border-left-color: var(--in); } .kpi.out { border-left-color: var(--out); }
+.kpi.bad { border-left-color: var(--danger); } .kpi.bad b { color: var(--danger); }
+.kpi.warn { border-left-color: #b45309; } .kpi.warn b { color: #b45309; }
+.dash-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+.dash-card h3 { margin: 0 0 6px; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dash-card h3 a { font-size: 13px; font-weight: 400; color: var(--navy); cursor: pointer; text-decoration: underline; }
+.att-title { font-weight: 600; margin: 10px 0 3px; font-size: 14px; } .att-title small { font-weight: 400; color: #64748b; }
+.att-row { margin: 2px 0; line-height: 1.9; } .att-none { color: #64748b; font-size: 14px; }
+.chip { display: inline-block; border-radius: 4px; padding: 1px 8px; margin: 0 4px 2px 0; font-size: 13px; border: 1px solid var(--line); background: #f2f5f8; }
+.chip.c-out { background: var(--danger-bg); border-color: #ef9a9a; color: var(--danger); }
+.chip.c-low { background: var(--hi); border-color: #f0b98f; color: #b45309; }
+.chip.c-neg { background: #fdecec; border-color: #c62828; color: #8e0000; font-weight: 600; }
+.chart-wrap { overflow-x: auto; } .legend { font-size: 13px; color: #51606f; margin-bottom: 2px; }
+.lg { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; } .lg:first-child { margin-left: 0; }
+.lg.in { background: var(--in); } .lg.out { background: var(--out); }
 #opt { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
 
 [hidden] { display: none !important; }
@@ -176,7 +194,7 @@ const SIZE_MODEL_OPTIONS = [
 const S = {
   token: localStorage.getItem('token'),
   role: localStorage.getItem('role'),
-  tab: 'report',
+  tab: 'dash',
   products: [],
   txs: [],
   options: { hiddenSpecs: [] },
@@ -315,12 +333,13 @@ function render() {
     return;
   }
   const tabs = [
+    ['dash', '📊 สรุป'],
     ['report', '📦 สินค้าคงเหลือ'],
     ['tx', '🔄 รับเข้า/จ่ายออก'],
     ['ai', '🤖 ผู้ช่วย AI']
   ];
   if (canEdit()) tabs.push(['items', '📝 รายการสินค้า'], ['import', '📥 นำเข้าข้อมูล']);
-  if (!tabs.some(([k]) => k === S.tab)) S.tab = 'report';   // กันกรณีค้างอยู่ในแท็บที่ไม่มีสิทธิ์
+  if (!tabs.some(([k]) => k === S.tab)) S.tab = 'dash';   // กันกรณีค้างอยู่ในแท็บที่ไม่มีสิทธิ์
 
   $('#app').innerHTML = `
     <header>
@@ -330,7 +349,7 @@ function render() {
     </header>
     <main id="v"></main>`;
 
-  const views = { report: vReport, tx: vTx, ai: vAi, items: vItems, import: vImport };
+  const views = { dash: vDash, report: vReport, tx: vTx, ai: vAi, items: vItems, import: vImport };
   if (views[S.tab]) views[S.tab]();
 }
 
@@ -345,6 +364,78 @@ function vReport() {
     </div>
     <div id="r"></div>`;
   drawReport();
+}
+
+// ===== หน้าสรุป (Dashboard) =====
+const thMonthShort = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('th-TH', { month: 'short' }) + ' ' + String((y + 543) % 100).padStart(2, '0'); };
+function monthKeys(n) {
+  const [y0, m0] = today().slice(0, 7).split('-').map(Number), out = [];
+  for (let i = n - 1; i >= 0; i--) out.push(new Date(Date.UTC(y0, m0 - 1 - i, 1)).toISOString().slice(0, 7));
+  return out;
+}
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p; return Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p); }
+const shortNum = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+
+function barChart(months, sums) {
+  const W = 760, H = 270, L = 44, R = 10, T = 22, B = 40, pw = W - L - R, ph = H - T - B;
+  const max = Math.max(1, ...months.flatMap(k => [sums[k].in, sums[k].out]));
+  const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+  const y = v => T + ph - (v / top) * ph;
+  const gw = pw / months.length, bw = Math.min(22, gw * 0.36);
+  let g = '';
+  for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#e3e8ee"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#64748b">${shortNum(v)}</text>`;
+  months.forEach((k, i) => {
+    const cx = L + gw * i + gw / 2, a = sums[k].in, o = sums[k].out;
+    const bar = (v, x, col) => v > 0 ? `<rect x="${x}" y="${y(v)}" width="${bw}" height="${T + ph - y(v)}" rx="2" fill="${col}"/><text x="${x + bw / 2}" y="${y(v) - 4}" text-anchor="middle" font-size="10" fill="#334155">${shortNum(v)}</text>` : '';
+    g += `<g><title>${thMonthShort(k)}: รับเข้า ${a.toLocaleString()} • จ่ายออก ${o.toLocaleString()}</title>${bar(a, cx - bw - 1, 'var(--in)')}${bar(o, cx + 1, 'var(--out)')}<text x="${cx}" y="${H - B + 17}" text-anchor="middle" font-size="11" fill="#51606f">${thMonthShort(k)}</text></g>`;
+  });
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:600px" role="img" aria-label="กราฟรับเข้าและจ่ายออกรายเดือน">${g}</svg></div>`;
+}
+
+function vDash() {
+  const b = bal();
+  const hadStock = new Set(S.txs.filter(t => t.kind === 'in').map(t => t.productId));
+  const items = S.products.map(p => ({ p, n: b[p.id] || 0 }));
+  const out0 = items.filter(x => x.n === 0 && hadStock.has(x.p.id));      // เคยมีของ แต่ตอนนี้หมด
+  const neg = items.filter(x => x.n < 0);
+  const low = items.filter(x => x.n > 0 && x.p.min > 0 && x.n <= x.p.min);
+  const total = items.reduce((s, x) => s + x.n, 0);
+
+  const months = monthKeys(12), sums = Object.fromEntries(months.map(k => [k, { in: 0, out: 0 }]));
+  S.txs.forEach(t => { const m = sums[t.date.slice(0, 7)]; if (m) m[t.kind] += t.qty; });
+  const cur = sums[months[months.length - 1]];
+  const hasChart = months.some(k => sums[k].in || sums[k].out);
+
+  const order = allTypes();
+  const chips = (list, fmt, cls) => order.map(cat => ({ cat, xs: list.filter(x => x.p.type === cat).sort((a, c) => bySpec(a.p, c.p)) })).filter(g => g.xs.length)
+    .map(g => `<div class="att-row"><b>${esc(g.cat)}</b> ${g.xs.map(x => `<span class="chip ${cls}">${esc(fmt(x))}</span>`).join('')}</div>`).join('') || '<div class="att-none">ไม่มีรายการ ✅</div>';
+  const sp = x => getItemSpec(x.p) || 'ทั่วไป';
+  const kpi = (l, v, c) => `<div class="kpi ${c}"><span>${l}</span><b>${v}</b></div>`;
+
+  const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
+  const last = [...S.txs].sort((a, c) => c.date.localeCompare(a.date) || (c.at || 0) - (a.at || 0)).slice(0, 10).map(t => {
+    const isIn = t.kind === 'in';
+    return { cls: isIn ? 'tx-in' : 'tx-out', data: [thDate(t.date), { h: `<span class="badge ${isIn ? 'badge-in' : 'badge-out'}">${isIn ? '📥 รับเข้า' : '📤 จ่ายออก'}</span>` }, byId[t.productId] ? pn(byId[t.productId]) : '(สินค้าถูกลบ)', t.qty, t.party || '-'] };
+  });
+
+  $('#v').innerHTML = `
+    <div class="kpis">
+      ${kpi('คงเหลือรวม', total.toLocaleString(), '')}
+      ${kpi('หมดคลัง', out0.length, out0.length ? 'bad' : '')}
+      ${kpi('ใกล้หมด', low.length, low.length ? 'warn' : '')}
+      ${kpi('รับเข้าเดือนนี้', cur.in.toLocaleString(), 'in')}
+      ${kpi('จ่ายออกเดือนนี้', cur.out.toLocaleString(), 'out')}
+    </div>
+    <div class="dash-card"><h3>⚠️ รายการที่ต้องสนใจ</h3>
+      <div class="att-title">หมดคลังแล้ว (${out0.length}) <small>เคยมีของและตอนนี้เหลือ 0</small></div>${chips(out0, sp, 'c-out')}
+      <div class="att-title">ใกล้หมด (${low.length})</div>${chips(low, x => `${sp(x)} (เหลือ ${x.n} / เตือนที่ ${x.p.min})`, 'c-low')}
+      ${canEdit() && !S.products.some(p => p.min > 0) ? '<div class="att-none" style="margin-top:4px">ยังไม่มีรายการที่ตั้ง "แจ้งเตือนเมื่อเหลือไม่เกิน" ตั้งได้ที่แท็บ รายการสินค้า</div>' : ''}
+      ${neg.length ? `<div class="att-title">ยอดติดลบ (${neg.length}) <small>มักเกิดจากบันทึกผิดหรือขาดรายการรับเข้า</small></div>${chips(neg, x => `${sp(x)} (${x.n})`, 'c-neg')}` : ''}
+    </div>
+    <div class="dash-card"><h3>📈 รับเข้า-จ่ายออก 12 เดือนล่าสุด</h3>
+      ${hasChart ? `<div class="legend"><span class="lg in"></span>รับเข้า<span class="lg out"></span>จ่ายออก <small>(จำนวนชิ้นรวม)</small></div>${barChart(months, sums)}` : '<div class="att-none">ยังไม่มีข้อมูลรับ-จ่ายในช่วง 12 เดือนล่าสุด</div>'}
+    </div>
+    <div class="dash-card"><h3><span>🕒 รายการล่าสุด 10 รายการ</span><a onclick="go('tx')">ดูทั้งหมด ›</a></h3>${tbl(['วันที่', 'ประเภท', 'สินค้า', 'จำนวน', 'ผู้ส่ง/ผู้รับ'], last)}</div>`;
 }
 
 let _cards = [], _cols = 0;
