@@ -227,10 +227,10 @@ const S = {
 
 const canEdit = () => S.role === 'editor';
 const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-const fmtBE = d => { const [y, m, dd] = String(d || '').split('-'); return y ? `${dd}/${TH_MON[+m - 1]}/${+y + 543}` : ''; };
+const fmtBE = d => { const [y, m, dd] = String(d || '').split('-'); return y ? `${+dd} ${TH_MON[+m - 1]} ${+y + 543}` : ''; };
 const thDate = fmtBE;
 // ช่องวันที่ แบบ วว/ดด/ปปปป (พ.ศ.) + ปุ่มปฏิทิน
-const dateField = (name, iso, onchange) => `<span class="dfield"><input ${name ? `name="${name}"` : ''} class="dtext" type="text" inputmode="numeric" maxlength="12" placeholder="09/ต.ค./2569" autocomplete="off" value="${esc(fmtBE(iso))}" oninput="dateMask(this)" onchange="dateCommit(this${onchange ? ',' + onchange : ''})" required><button type="button" class="dcal" title="เลือกจากปฏิทิน" onclick="dateCal(this)">📅</button><input type="date" class="dpick" tabindex="-1" aria-hidden="true" onchange="datePicked(this)"></span>`;
+const dateField = (name, iso, onchange) => `<span class="dfield"><input ${name ? `name="${name}"` : ''} class="dtext" type="text" inputmode="numeric" maxlength="12" placeholder="9 ต.ค. 2569" autocomplete="off" value="${esc(fmtBE(iso))}" oninput="dateMask(this)" onchange="dateCommit(this${onchange ? ',' + onchange : ''})" required><button type="button" class="dcal" title="เลือกจากปฏิทิน" onclick="dateCal(this)">📅</button><input type="date" class="dpick" tabindex="-1" aria-hidden="true" onchange="datePicked(this)"></span>`;
 function dateMask(el) {
   if (/[^\d\/\-. ]/.test(el.value)) return;   // กำลังพิมพ์ชื่อเดือนไทย ไม่ต้องจัดรูปแบบ
   let v = el.value.replace(/[^\d]/g, '').slice(0, 8), o = v.slice(0, 2);
@@ -242,7 +242,7 @@ function dateCommit(el, cb) {
   const iso = parseDate(el.value);
   el.classList.toggle('need', !iso);
   el.dataset.iso = iso || '';
-  el.setCustomValidity(iso ? '' : 'วันที่ไม่ถูกต้อง (รูปแบบ วว/เดือน/ปี เช่น 09/ต.ค./2569 หรือ 09/10/2569)');
+  el.setCustomValidity(iso ? '' : 'วันที่ไม่ถูกต้อง (รูปแบบ วว/เดือน/ปี เช่น 9 ต.ค. 2569 หรือ 09/10/2569)');
   if (iso) el.value = fmtBE(iso);
   if (cb) cb(iso, el);
 }
@@ -612,7 +612,7 @@ function vTx() {
         </label>
       </div>
 
-      <label>วันที่ <small>(วว/เดือน/ปี พ.ศ.)</small>${dateField("date", editingTx ? editingTx.date : (cy ? cy.date : today()))}</label>
+      <label>วันที่ <small>(เช่น 9 ต.ค. 2569)</small>${dateField("date", editingTx ? editingTx.date : (cy ? cy.date : today()))}</label>
       <label>ประเภทสินค้า
         <select name="ptype" onchange="syncTxSpec()" required>
           <option value="">— เลือกประเภท —</option>${typeOpts}
@@ -828,7 +828,7 @@ async function exportTxExcel() {
     ['วิธีแก้ไขแล้วอัปโหลดกลับเข้าระบบ'],
     ['1. แก้ไขข้อมูลในแผ่น "รับเข้า-จ่ายออก" ได้ทุกช่อง ยกเว้นช่อง "รหัสรายการ" และห้ามลบคอลัมน์นี้'],
     ['2. เพิ่มรายการใหม่: เพิ่มแถวใหม่ แล้วเว้นช่อง "รหัสรายการ" ว่างไว้'],
-    ['3. ประเภทต้องเป็น "รับเข้า" หรือ "จ่ายออก" / วันที่ใช้รูปแบบ 09/ต.ค./2569 หรือ 09/10/2569 (พ.ศ.)'],
+    ['3. ประเภทต้องเป็น "รับเข้า" หรือ "จ่ายออก" / วันที่ใช้รูปแบบ 9 ต.ค. 2569 หรือ 09/10/2569 (พ.ศ.)'],
     ['4. หมวดสินค้า และ size / แบบ พิมพ์ให้ตรงกับในระบบ ถ้าไม่มีในระบบ จะสร้างสินค้าใหม่ให้'],
     ['5. อัปโหลดที่แท็บ รับเข้า/จ่ายออก ปุ่ม "อัปเดตจาก Excel" (แนะนำให้ Export โดยไม่ใส่คำค้น เพื่อได้ครบทุกรายการ)'],
     ['6. คอลัมน์ "เลขซีเรียล" ใส่ได้หลายหมายเลข คั่นด้วยคอมมา เช่น 14788/2527, 14630/2567 (ช่วงต่อเนื่องใช้ 14788-14800/2527 ได้) ถ้าลบคอลัมน์นี้ทิ้ง ระบบจะไม่แตะต้องซีเรียลเดิม']
@@ -1144,7 +1144,7 @@ async function saveTx(ev, force) {
   if (!p) return alert('กรุณาเลือกประเภทสินค้า และ size / แบบ');
 
   const kindVal = f.querySelector('input[name="kind"]:checked')?.value || 'in';
-  if (!parseDate(f.date.value)) return alert('วันที่ไม่ถูกต้อง กรุณากรอกเป็น วว/เดือน/ปี เช่น 09/ต.ค./2569 หรือ 09/10/2569');
+  if (!parseDate(f.date.value)) return alert('วันที่ไม่ถูกต้อง กรุณากรอกเป็น วว/เดือน/ปี เช่น 9 ต.ค. 2569 หรือ 09/10/2569');
   const tx = {
     id: f.txId.value || undefined,
     date: parseDate(f.date.value),
