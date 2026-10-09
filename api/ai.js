@@ -35,6 +35,8 @@ async function chat({ base, key, model }, messages, { max = 2000, timeout = 50, 
       if ([429, 502, 503, 504].includes(r.status) && attempt === 0 && Date.now() - t0 < 15000) { await sleep(2000); continue; }
       const e0 = Array.isArray(j) ? j[0] : j;   // Google ตอบ error เป็น array ในบางกรณี
       const why = String(e0?.error?.message || (typeof e0?.error === 'string' ? e0.error : '') || e0?.message || `รหัส ${r.status}`).slice(0, 200);
+      if (r.status === 429)
+        throw new Error(`${label}: โควตาของโมเดลนี้เต็ม (429) อาจเป็นโควตารายวันหรือรายนาทีของแพ็กเกจฟรี กรุณารอแล้วลองใหม่ หรือสลับไปใช้โมเดลอื่น [โมเดล: ${model}]`);
       throw new Error(`${label}: ผู้ให้บริการตอบกลับผิดพลาด (รหัส ${r.status}: ${why}) [โมเดล: ${model}]`);
     }
 
@@ -136,7 +138,8 @@ ${table}` },
       const sortedP = sorted(products);
       const byNo = new Map(sortedP.map((p, i) => [i + 1, p]));
       const list = sortedP.map((p, i) => `#${i + 1} | ${p.type} | ${spec(p) || '-'}`).join('\n');
-      const out = await chat(parseWithVision ? vision : text, [
+      // AI_PARSE_MODEL = ใช้โมเดลอื่นของผู้ให้บริการเดียวกันแยกสำหรับขั้นแยกรายการ (โควตาฟรีนับแยกตามโมเดล)
+      const out = await chat(parseWithVision ? { ...vision, model: process.env.AI_PARSE_MODEL || vision.model } : text, [
         { role: 'system', content: `คุณแปลงข้อความ (หรือข้อความที่อ่านจากใบส่งของ/ใบจ่ายของ) เป็นรายการรับเข้า/จ่ายออกของคลังสินค้า
 วันนี้คือ ${today()} (ค.ศ.) เอกสารไทยมักใช้ปี พ.ศ. ให้แปลงเป็น ค.ศ. (ลบ 543)
 กติกา:
