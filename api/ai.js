@@ -151,8 +151,9 @@ ${table}` },
 - doc_no = เลขที่เอกสาร/ใบส่งของ, party = ผู้ส่ง/ผู้รับ/หน่วยงาน, note = ข้อมูลอื่นที่เกี่ยวข้อง (สั้นๆ)
 - date รูปแบบ YYYY-MM-DD ถ้าไม่ระบุให้เป็น null
 - source = ข้อความต้นฉบับที่ใช้สร้างรายการนั้น ไม่เกิน 40 ตัวอักษร
+- serials = เลขซีเรียลประจำชิ้นของแจ๊คเก็ต/หมวกนิรภัย (เช่น 14788/2527) ใส่เป็นลิสต์เฉพาะเลขที่ปรากฏในข้อความจริงเท่านั้น ถ้าไม่มีให้ใส่ [] ห้ามเดาหรือสร้างเลขเอง (qty ยังต้องเป็นจำนวนตามเอกสาร)
 ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น ไม่ต้องอธิบาย รูปแบบ:
-{"rows":[{"date":"YYYY-MM-DD หรือ null","kind":"in หรือ out","product_no":ตัวเลข หรือ null,"qty":ตัวเลข,"doc_no":"","party":"","note":"","source":""}],"warnings":["..."]}
+{"rows":[{"date":"YYYY-MM-DD หรือ null","kind":"in หรือ out","product_no":ตัวเลข หรือ null,"qty":ตัวเลข,"doc_no":"","party":"","note":"","source":"","serials":[]}],"warnings":["..."]}
 
 รายการสินค้า (#เลข | ประเภท | size/แบบ):
 ${list}` },
@@ -168,7 +169,8 @@ ${list}` },
         let date = /^\d{4}-\d{2}-\d{2}$/.test(r.date || '') ? r.date : '';
         if (date && +date.slice(0, 4) > 2400) date = `${+date.slice(0, 4) - 543}${date.slice(4)}`;
         const p = byNo.get(Number(r.product_no));
-        rows.push({ date, kind, productId: p ? p.id : '', qty, docNo: str(r.doc_no, 60), party: str(r.party), note: str(r.note, 300), source: str(r.source, 200) });
+        rows.push({ date, kind, productId: p ? p.id : '', qty, docNo: str(r.doc_no, 60), party: str(r.party), note: str(r.note, 300), source: str(r.source, 200),
+          serials: Array.isArray(r.serials) ? [...new Set(r.serials.map((x) => str(x, 40)).filter(Boolean))].slice(0, 2000) : [] });
       }
       if (!rows.length) warnings.push('AI ไม่พบรายการที่นำมาบันทึกได้ ลองเขียนข้อความให้ชัดเจนขึ้น');
       return res.json({ rows, warnings });

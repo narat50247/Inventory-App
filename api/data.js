@@ -4,6 +4,7 @@ import { redis, getRole } from './_lib.js';
 const fail = (res, code, error, extra = {}) => res.status(code).json({ error, ...extra });
 const str = (v, n = 200) => String(v || '').slice(0, n).trim();
 const img = (v) => (typeof v === 'string' && v.startsWith('https://') ? v : '');
+const serialList = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 40)).filter(Boolean))].slice(0, 2000) : []);
 const name = (p) => [p.type, p.model, p.size].filter(Boolean).join(' ');
 const balance = (txs, id) => txs.reduce((n, t) => (t.productId === id ? n + (t.kind === 'in' ? t.qty : -t.qty) : n), 0);
 const validTx = (t, p, qty) =>
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
       if (qty > have) return fail(res, 409, `ยอดคงเหลือไม่พอ (เหลือ ${have})`, { short: true });
     }
     const tx = { id: randomUUID(), date: t.date, kind: t.kind, productId: p.id, qty,
-      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), at: Date.now() };
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), serials: serialList(t.serials), at: Date.now() };
     await redis.rpush('inv:tx', tx);
     return res.json({ tx });
   }
@@ -71,7 +72,8 @@ export default async function handler(req, res) {
     if (idx < 0) return fail(res, 404, 'ไม่พบรายการ');
     if (!validTx(t, p, qty)) return fail(res, 400, 'ข้อมูลไม่ครบหรือไม่ถูกต้อง');
     const tx = { ...all[idx], date: t.date, kind: t.kind, productId: p.id, qty,
-      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), editedAt: Date.now() };
+      docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image),
+      serials: Array.isArray(t.serials) ? serialList(t.serials) : (all[idx].serials || []), editedAt: Date.now() };
     if (!body.force) {
       const next = all.map((x, i) => (i === idx ? tx : x));
       for (const id of new Set([all[idx].productId, p.id])) {
@@ -138,11 +140,13 @@ export default async function handler(req, res) {
       if (!valid.has(pid) || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || !['in', 'out'].includes(r.kind) || !Number.isInteger(qty) || qty < 1)
         return fail(res, 400, 'ข้อมูลบางแถวไม่ถูกต้อง ไม่มีการเปลี่ยนแปลงใดๆ');
       const data = { date: r.date, kind: r.kind, productId: pid, qty, docNo: str(r.docNo, 60), party: str(r.party), note: str(r.note, 300), image: img(r.image) };
+      const ser = Array.isArray(r.serials) ? serialList(r.serials) : null;   // null = ไฟล์ไม่มีคอลัมน์ซีเรียล -> ไม่แตะของเดิม
       const old = r.id && !used.has(r.id) ? byId.get(r.id) : null;
       if (old) {
         used.add(old.id);
-        out.push(FIELDS.every((k) => (old[k] ?? '') === data[k]) ? old : { ...old, ...data, editedAt: now });
-      } else out.push({ id: randomUUID(), ...data, at: now + i });
+        const sameSer = ser === null || JSON.stringify(old.serials || []) === JSON.stringify(ser);
+        out.push(FIELDS.every((k) => (old[k] ?? '') === data[k]) && sameSer ? old : { ...old, ...data, ...(ser !== null ? { serials: ser } : {}), editedAt: now });
+      } else out.push({ id: randomUUID(), ...data, serials: ser || [], at: now + i });
     }
     const final = [...(body.deleteMissing ? [] : all.filter((t) => !used.has(t.id))), ...out];
     const tmp = 'inv:tx:new';
@@ -172,7 +176,7 @@ export default async function handler(req, res) {
       if (t.kind === 'out' && next < 0) short.push(`${[p.type, p.size || p.model].filter(Boolean).join(' ')} (เหลือ ${cur}, จ่าย ${qty})`);
       bal.set(p.id, next);
       out.push({ id: randomUUID(), date: t.date, kind: t.kind, productId: p.id, qty,
-        docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), at: now + i });
+        docNo: str(t.docNo, 60), party: str(t.party), note: str(t.note, 300), image: img(t.image), serials: serialList(t.serials), at: now + i });
     }
     if (short.length && !body.force) return fail(res, 409, 'ยอดคงเหลือไม่พอ: ' + short.join(', '), { short: true });
     await redis.rpush('inv:tx', ...out);
