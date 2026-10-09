@@ -58,6 +58,17 @@ form { background: #fff; border: 1px solid var(--line); border-radius: 8px; padd
 form h2 { grid-column: 1 / -1; margin: 0 0 4px 0; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid #aab4be; border-radius: 6px; background: #fff; min-height: 38px; }
+input.need { border-color: #c0392b; background: #fdecea; }
+.saved-msg { grid-column: 1/-1; background: var(--in-bg); border: 1px solid #a5d6a7; color: #1b5e20; padding: 8px 12px; border-radius: 8px; }
+.saved-msg a { cursor: pointer; text-decoration: underline; }
+input.carried { background: #fff8d6; border-color: #e0b400; }
+.keep-opt { grid-column: 1/-1; flex-direction: row !important; align-items: center; gap: 8px; font-size: 14px; }
+.keep-opt input { min-height: 0; }
+.muted { color: #667788; font-size: 13px; }
+.dfield { position: relative; display: flex; align-items: center; gap: 4px; }
+.dfield .dtext { width: 120px; min-width: 0; flex: 1; }
+.dfield .dcal { border: 1px solid #aab4be; background: #fff; border-radius: 6px; min-height: 38px; padding: 0 8px; cursor: pointer; }
+.dfield .dpick { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 input:focus, select:focus { border-color: var(--navy); outline: none; box-shadow: 0 0 0 2px rgba(22,57,92,0.15); }
 
 /* Segmented Buttons for In/Out */
@@ -207,13 +218,44 @@ const S = {
   options: { hiddenSpecs: [] },
   editingTxId: null,
   openSer: new Set(),
+  keepOn: true, carry: null, savedMsg: '',
+  serQ: '', serSt: 'in', serType: '', serLimit: 100, serOpen: new Set(),
   txSort: { k: 'date', dir: -1 },
   txPage: 1,
   txSize: 50
 };
 
 const canEdit = () => S.role === 'editor';
-const thDate = d => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const fmtBE = d => { const [y, m, dd] = String(d || '').split('-'); return y ? `${dd}/${TH_MON[+m - 1]}/${+y + 543}` : ''; };
+const thDate = fmtBE;
+// ช่องวันที่ แบบ วว/ดด/ปปปป (พ.ศ.) + ปุ่มปฏิทิน
+const dateField = (name, iso, onchange) => `<span class="dfield"><input ${name ? `name="${name}"` : ''} class="dtext" type="text" inputmode="numeric" maxlength="12" placeholder="09/ต.ค./2569" autocomplete="off" value="${esc(fmtBE(iso))}" oninput="dateMask(this)" onchange="dateCommit(this${onchange ? ',' + onchange : ''})" required><button type="button" class="dcal" title="เลือกจากปฏิทิน" onclick="dateCal(this)">📅</button><input type="date" class="dpick" tabindex="-1" aria-hidden="true" onchange="datePicked(this)"></span>`;
+function dateMask(el) {
+  if (/[^\d\/\-. ]/.test(el.value)) return;   // กำลังพิมพ์ชื่อเดือนไทย ไม่ต้องจัดรูปแบบ
+  let v = el.value.replace(/[^\d]/g, '').slice(0, 8), o = v.slice(0, 2);
+  if (v.length > 2) o += '/' + v.slice(2, 4);
+  if (v.length > 4) o += '/' + v.slice(4);
+  el.value = o;
+}
+function dateCommit(el, cb) {
+  const iso = parseDate(el.value);
+  el.classList.toggle('need', !iso);
+  el.dataset.iso = iso || '';
+  el.setCustomValidity(iso ? '' : 'วันที่ไม่ถูกต้อง (รูปแบบ วว/เดือน/ปี เช่น 09/ต.ค./2569 หรือ 09/10/2569)');
+  if (iso) el.value = fmtBE(iso);
+  if (cb) cb(iso, el);
+}
+function dateCal(btn) {
+  const w = btn.parentNode, p = w.querySelector('.dpick'), t = w.querySelector('.dtext');
+  p.value = parseDate(t.value) || today();
+  try { p.showPicker(); } catch { p.focus(); p.click(); }
+}
+function datePicked(p) {
+  const t = p.parentNode.querySelector('.dtext');
+  if (!p.value) return;
+  t.value = fmtBE(p.value); t.dispatchEvent(new Event('change'));
+}
 
 // แสดง size/แบบ
 const getItemSpec = p => {
@@ -371,6 +413,7 @@ function render() {
     ['dash', '📊 สรุป'],
     ['report', '📦 สินค้าคงเหลือ'],
     ['tx', '🔄 รับเข้า/จ่ายออก'],
+    ['ser', '🔢 ซีเรียล'],
     ['ai', '🤖 ผู้ช่วย AI']
   ];
   if (canEdit()) tabs.push(['items', '📝 รายการสินค้า'], ['import', '📥 นำเข้าข้อมูล']);
@@ -384,11 +427,11 @@ function render() {
     </header>
     <main id="v"></main>`;
 
-  const views = { dash: vDash, report: vReport, tx: vTx, ai: vAi, items: vItems, import: vImport };
+  const views = { dash: vDash, report: vReport, tx: vTx, ser: vSer, ai: vAi, items: vItems, import: vImport };
   if (views[S.tab]) views[S.tab]();
 }
 
-function go(t) { S.tab = t; S.editingTxId = null; render(); }
+function go(t) { S.tab = t; S.editingTxId = null; S.savedMsg = ''; render(); }
 
 /* 1. Inventory View */
 function vReport() {
@@ -549,24 +592,27 @@ function exportCsv() {
 function vTx() {
   const editingTx = S.editingTxId ? S.txs.find(t => t.id === S.editingTxId) : null;
   const ep = editingTx ? S.products.find(p => p.id === editingTx.productId) : null;
+  const cy = (!editingTx && S.keepOn && S.carry) ? S.carry : null;   // ค่าที่คงไว้จากรายการก่อนหน้า
+  const kindDef = editingTx ? editingTx.kind : (cy ? cy.kind : 'in');
   const typeOpts = allTypes().filter(t => S.products.some(p => p.type === t))
     .map(t => `<option value="${esc(t)}" ${ep && ep.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('');
 
   const form = canEdit() ? `
     <form id="tf" onsubmit="saveTx(event)">
       <h2>${editingTx ? '✏️ แก้ไขรายการ รับเข้า/จ่ายออก' : '➕ บันทึก รับเข้า / จ่ายออก'}</h2>
+      ${S.savedMsg && !editingTx ? `<div class="saved-msg">✅ ${esc(S.savedMsg)}${cy ? `<br><small>คงค่า วันที่ ประเภท เลขที่ส่งของ ผู้ส่ง/ผู้รับ ไว้ให้แล้ว (ช่องสีเหลือง) — <b>ถ้าเปลี่ยนไปบันทึกเอกสารใบใหม่ ให้แก้เลขที่ส่งของก่อน</b> หรือ <a onclick="clearCarry()">ล้างค่าทั้งหมด</a></small>` : ''}</div>` : ''}
       <input type="hidden" name="txId" value="${editingTx ? editingTx.id : ''}">
 
       <div class="seg-group">
-        <label class="seg-btn in-btn ${(!editingTx || editingTx.kind === 'in') ? 'active' : ''}" onclick="selectKind('in')">
-          <input type="radio" name="kind" value="in" ${(!editingTx || editingTx.kind === 'in') ? 'checked' : ''}> 📥 รับเข้าสินค้า
+        <label class="seg-btn in-btn ${kindDef === 'in' ? 'active' : ''}" onclick="selectKind('in')">
+          <input type="radio" name="kind" value="in" ${kindDef === 'in' ? 'checked' : ''}> 📥 รับเข้าสินค้า
         </label>
-        <label class="seg-btn out-btn ${(editingTx && editingTx.kind === 'out') ? 'active' : ''}" onclick="selectKind('out')">
-          <input type="radio" name="kind" value="out" ${(editingTx && editingTx.kind === 'out') ? 'checked' : ''}> 📤 จ่ายออกสินค้า
+        <label class="seg-btn out-btn ${kindDef === 'out' ? 'active' : ''}" onclick="selectKind('out')">
+          <input type="radio" name="kind" value="out" ${kindDef === 'out' ? 'checked' : ''}> 📤 จ่ายออกสินค้า
         </label>
       </div>
 
-      <label>วันที่<input name="date" type="date" value="${editingTx ? editingTx.date : today()}" required></label>
+      <label>วันที่ <small>(วว/เดือน/ปี พ.ศ.)</small>${dateField("date", editingTx ? editingTx.date : (cy ? cy.date : today()))}</label>
       <label>ประเภทสินค้า
         <select name="ptype" onchange="syncTxSpec()" required>
           <option value="">— เลือกประเภท —</option>${typeOpts}
@@ -578,8 +624,8 @@ function vTx() {
       </label>
 
       <label>จำนวน<input name="qty" type="number" min="1" step="1" value="${editingTx ? editingTx.qty : ''}" required oninput="this.dataset.auto='';updSerCount()"></label>
-      <label>เลขที่ส่งของ / เอกสาร<input name="docNo" value="${editingTx ? esc(editingTx.docNo) : ''}"></label>
-      <label>ผู้ส่ง / ผู้รับ<input name="party" value="${editingTx ? esc(editingTx.party) : ''}"></label>
+      <label>เลขที่ส่งของ / เอกสาร<input name="docNo" class="${cy && cy.docNo ? 'carried' : ''}" value="${editingTx ? esc(editingTx.docNo) : (cy ? esc(cy.docNo) : '')}"></label>
+      <label>ผู้ส่ง / ผู้รับ<input name="party" class="${cy && cy.party ? 'carried' : ''}" value="${editingTx ? esc(editingTx.party) : (cy ? esc(cy.party) : '')}"></label>
       <label>หมายเหตุ<input name="note" value="${editingTx ? esc(editingTx.note) : ''}"></label>
 
       <div class="ser-box" id="serbox" hidden>
@@ -595,6 +641,7 @@ function vTx() {
         <div id="tip">${editingTx && editingTx.image ? txImgHtml(editingTx.image) : ''}</div>
       </div>
 
+      ${editingTx ? '' : `<label class="keep-opt"><input type="checkbox" ${S.keepOn ? 'checked' : ''} onchange="toggleKeep(this.checked)"> 🔁 บันทึกต่อจากเอกสารใบเดิม (คงวันที่ / ประเภท / เลขที่ส่งของ / ผู้ส่ง-ผู้รับ ไว้หลังบันทึก)</label>`}
       <div style="display:flex;gap:8px;grid-column:1/-1;">
         <button type="submit" class="p" style="flex:1;">${editingTx ? 'บันทึกการแก้ไข' : 'บันทึกรายการ'}</button>
         ${editingTx ? `<button type="button" onclick="cancelEditTx()">ยกเลิก</button>` : ''}
@@ -605,6 +652,7 @@ function vTx() {
     `<input type="file" id="qa" accept="image/*" hidden onchange="quickAttach(this)">` +
     `<div class="bar"><input id="q" placeholder="🔍 ค้นหาประวัติ สินค้า / เลขที่ส่งของ / ผู้รับ-ผู้ส่ง" oninput="S.txPage=1;drawTx()">${canEdit() ? '<button type="button" onclick="exportTxExcel()">📥 Export Excel</button><button type="button" onclick="toggleXl()">📤 อัปเดตจาก Excel</button>' : ''}</div>${canEdit() ? '<div id="xl" class="xl-panel" hidden></div>' : ''}<div id="r"></div>`;
   if (canEdit() && ep) syncTxSpec(ep.id);
+  else if (canEdit() && cy && cy.ptype) { const f = $('#tf'); f.ptype.value = cy.ptype; syncTxSpec(); if (f.ptype.value) f.pspec.focus(); }
   drawTx();
 }
 
@@ -766,7 +814,7 @@ async function exportTxExcel() {
   const all = txRows();
   if (!all.length) return alert('ไม่มีข้อมูลให้ส่งออก');
   try { await loadXlsx(); } catch { return alert('โหลดตัวสร้างไฟล์ Excel ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
-  const fmt = d => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${+y + 543}`; };
+  const fmt = fmtBE;
   const rows = all.map(({ t, p }) => ({
     'วันที่': fmt(t.date), 'ประเภท': t.kind === 'in' ? 'รับเข้า' : 'จ่ายออก',
     'หมวดสินค้า': p ? p.type : '(สินค้าถูกลบ)', 'size / แบบ': p ? getItemSpec(p) : '',
@@ -780,7 +828,7 @@ async function exportTxExcel() {
     ['วิธีแก้ไขแล้วอัปโหลดกลับเข้าระบบ'],
     ['1. แก้ไขข้อมูลในแผ่น "รับเข้า-จ่ายออก" ได้ทุกช่อง ยกเว้นช่อง "รหัสรายการ" และห้ามลบคอลัมน์นี้'],
     ['2. เพิ่มรายการใหม่: เพิ่มแถวใหม่ แล้วเว้นช่อง "รหัสรายการ" ว่างไว้'],
-    ['3. ประเภทต้องเป็น "รับเข้า" หรือ "จ่ายออก" / วันที่ใช้รูปแบบ วว/ดด/ปปปป (พ.ศ.)'],
+    ['3. ประเภทต้องเป็น "รับเข้า" หรือ "จ่ายออก" / วันที่ใช้รูปแบบ 09/ต.ค./2569 หรือ 09/10/2569 (พ.ศ.)'],
     ['4. หมวดสินค้า และ size / แบบ พิมพ์ให้ตรงกับในระบบ ถ้าไม่มีในระบบ จะสร้างสินค้าใหม่ให้'],
     ['5. อัปโหลดที่แท็บ รับเข้า/จ่ายออก ปุ่ม "อัปเดตจาก Excel" (แนะนำให้ Export โดยไม่ใส่คำค้น เพื่อได้ครบทุกรายการ)'],
     ['6. คอลัมน์ "เลขซีเรียล" ใส่ได้หลายหมายเลข คั่นด้วยคอมมา เช่น 14788/2527, 14630/2567 (ช่วงต่อเนื่องใช้ 14788-14800/2527 ได้) ถ้าลบคอลัมน์นี้ทิ้ง ระบบจะไม่แตะต้องซีเรียลเดิม']
@@ -859,7 +907,7 @@ function drawDraft() {
   const showSer = AI.rows.some(r => (r.serials || []).length || usesSerial((S.products.find(p => p.id === r.productId) || {}).type));
   const rows = AI.rows.map((r, i) => `<tr class="${r.kind === 'in' ? 'tx-in' : 'tx-out'}">
     <td><input type="checkbox" ${r.on ? 'checked' : ''} onchange="AI.rows[${i}].on=this.checked;updDraftBtn()"></td>
-    <td><input type="date" value="${esc(r.date)}" onchange="AI.rows[${i}].date=this.value"></td>
+    <td>${dateField("", r.date, `iso=>{if(iso)AI.rows[${i}].date=iso}`)}</td>
     <td><select onchange="AI.rows[${i}].kind=this.value;drawDraft()"><option value="in" ${r.kind === 'in' ? 'selected' : ''}>รับเข้า</option><option value="out" ${r.kind === 'out' ? 'selected' : ''}>จ่ายออก</option></select></td>
     <td><select class="${r.productId ? '' : 'need'}" onchange="AI.rows[${i}].productId=this.value;this.classList.toggle('need',!this.value)">${opts(r.productId)}</select><div class="src">${esc(r.source)}</div></td>
     <td><input type="number" min="1" step="1" value="${r.qty}" style="width:72px" onchange="AI.rows[${i}].qty=+this.value"></td>
@@ -898,7 +946,6 @@ async function saveDraft(force) {
 // ===== อัปเดตข้อมูลจากไฟล์ Excel ที่ export ออกมา (แก้แล้วอัปโหลดกลับ) =====
 const XL_COL = { id: 'รหัสรายการ (ห้ามแก้ไข)', date: 'วันที่', kind: 'ประเภท', type: 'หมวดสินค้า', spec: 'size / แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'เลขซีเรียล', image: 'ลิงก์รูปภาพ' };
 const XL_LABEL = { date: 'วันที่', kind: 'ประเภท', type: 'หมวด', spec: 'size/แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'ซีเรียล', image: 'รูป' };
-const fmtBE = d => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${+y + 543}`; };
 let XL = null;
 
 function xlDate(v) {
@@ -1029,6 +1076,67 @@ function cancelEditTx() {
   vTx();
 }
 
+// ---------- ซีเรียลรายชิ้น: สถานะล่าสุดของแต่ละหมายเลข ----------
+function serialState() {
+  const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
+  const m = new Map();
+  [...S.txs].filter(t => (t.serials || []).length)
+    .sort((a, c) => a.date.localeCompare(c.date) || (a.at || 0) - (c.at || 0))
+    .forEach(t => t.serials.forEach(x => {
+      const e = m.get(x) || { serial: x, hist: [] };
+      e.hist.push(t); e.last = t; e.p = byId[t.productId] || e.p; m.set(x, e);
+    }));
+  return [...m.values()];
+}
+function serRows() {
+  const q = S.serQ.trim().toLowerCase();
+  return serialState().filter(e => (!S.serSt || (S.serSt === 'in') === (e.last.kind === 'in')) &&
+    (!S.serType || (e.p && e.p.type === S.serType)) && (!q || e.serial.toLowerCase().includes(q)))
+    .sort((a, c) => a.serial.localeCompare(c.serial, undefined, { numeric: true }));
+}
+function vSer() {
+  const all = serialState(), inN = all.filter(e => e.last.kind === 'in').length;
+  const types = [...new Set(all.map(e => e.p && e.p.type).filter(Boolean))];
+  $('#v').innerHTML = `
+    <div class="dash-card"><h3><span>🔢 เลขซีเรียลรายชิ้น</span></h3>
+      <p class="muted" style="margin:0 0 8px">สถานะดูจากรายการล่าสุดของแต่ละหมายเลข (รับเข้า = ยังอยู่ในคลัง, จ่ายออก = จ่ายแล้ว) เฉพาะรายการที่บันทึกเลขซีเรียลไว้</p>
+      <div class="bar">
+        <input id="sq" placeholder="🔍 ค้นหาเลขซีเรียล เช่น 14788/2527" value="${esc(S.serQ)}" oninput="S.serQ=this.value;S.serLimit=100;drawSer()">
+        <select onchange="S.serSt=this.value;S.serLimit=100;drawSer()">
+          <option value="in" ${S.serSt === 'in' ? 'selected' : ''}>ยังอยู่ในคลัง (${inN})</option>
+          <option value="out" ${S.serSt === 'out' ? 'selected' : ''}>จ่ายออกแล้ว (${all.length - inN})</option>
+          <option value="" ${S.serSt === '' ? 'selected' : ''}>ทั้งหมด (${all.length})</option></select>
+        <select onchange="S.serType=this.value;S.serLimit=100;drawSer()"><option value="">ทุกประเภท</option>${types.map(t => `<option ${S.serType === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+        ${canEdit() ? '<button type="button" onclick="exportSerExcel()">📥 Export Excel</button>' : ''}
+      </div><div id="sr"></div></div>`;
+  drawSer();
+}
+function drawSer() {
+  const rows = serRows(), el = $('#sr'); if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p class="muted">ไม่พบเลขซีเรียล (ต้องบันทึกเลขซีเรียลตอนรับเข้า/จ่ายออกก่อน)</p>'; return; }
+  const part = rows.slice(0, S.serLimit);
+  el.innerHTML = `<small class="muted">แสดง ${part.length} จาก ${rows.length} หมายเลข</small><div class="tw"><table><thead><tr><th>เลขซีเรียล</th><th>สินค้า</th><th>สถานะ</th><th>วันที่ล่าสุด</th><th>เลขที่ส่งของ</th><th>ผู้ส่ง/ผู้รับ</th><th></th></tr></thead><tbody>${part.map(e => {
+    const t = e.last, isIn = t.kind === 'in', k = encodeURIComponent(e.serial), open = S.serOpen.has(e.serial);
+    return `<tr class="${isIn ? 'tx-in' : 'tx-out'}"><td><b>${esc(e.serial)}</b></td><td>${esc(pn(e.p) || '(สินค้าถูกลบ)')}</td>
+      <td><span class="badge ${isIn ? 'badge-in' : 'badge-out'}">${isIn ? '📦 ในคลัง' : '📤 จ่ายแล้ว'}</span></td>
+      <td>${fmtBE(t.date)}</td><td>${esc(t.docNo || '-')}</td><td>${esc(t.party || '-')}</td>
+      <td><button class="ser-btn" onclick="toggleSerHist(decodeURIComponent('${k}'))">ประวัติ ${e.hist.length} ${open ? '▴' : '▾'}</button></td></tr>` +
+      (open ? `<tr><td colspan="7" style="background:#f6f8fa">${e.hist.map(h => `${fmtBE(h.date)} — ${h.kind === 'in' ? '📥 รับเข้า' : '📤 จ่ายออก'} • ${esc(h.docNo || '-')} • ${esc(h.party || '-')}`).join('<br>')}</td></tr>` : '');
+  }).join('')}</tbody></table></div>${rows.length > part.length ? `<button type="button" onclick="S.serLimit+=200;drawSer()" style="margin-top:8px">แสดงเพิ่ม</button>` : ''}`;
+}
+function toggleSerHist(x) { if (S.serOpen.has(x)) S.serOpen.delete(x); else S.serOpen.add(x); drawSer(); }
+async function exportSerExcel() {
+  if (!canEdit()) return;
+  const rows = serRows(); if (!rows.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  try { await loadXlsx(); } catch { return alert('โหลดตัวสร้างไฟล์ Excel ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
+  const ws = XLSX.utils.json_to_sheet(rows.map(e => ({ 'เลขซีเรียล': e.serial, 'สินค้า': pn(e.p), 'สถานะ': e.last.kind === 'in' ? 'ในคลัง' : 'จ่ายแล้ว', 'วันที่ล่าสุด': fmtBE(e.last.date), 'เลขที่ส่งของ': e.last.docNo || '', 'ผู้ส่ง/ผู้รับ': e.last.party || '' })));
+  ws['!cols'] = [{ wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 24 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'ซีเรียล');
+  XLSX.writeFile(wb, `ซีเรียล_${today()}.xlsx`);
+}
+
+function toggleKeep(on) { S.keepOn = on; if (!on) S.carry = null; vTx(); }
+function clearCarry() { S.carry = null; S.savedMsg = ''; vTx(); }
 async function saveTx(ev, force) {
   if (ev) ev.preventDefault();
   const f = $('#tf');
@@ -1036,9 +1144,10 @@ async function saveTx(ev, force) {
   if (!p) return alert('กรุณาเลือกประเภทสินค้า และ size / แบบ');
 
   const kindVal = f.querySelector('input[name="kind"]:checked')?.value || 'in';
+  if (!parseDate(f.date.value)) return alert('วันที่ไม่ถูกต้อง กรุณากรอกเป็น วว/เดือน/ปี เช่น 09/ต.ค./2569 หรือ 09/10/2569');
   const tx = {
     id: f.txId.value || undefined,
-    date: f.date.value,
+    date: parseDate(f.date.value),
     kind: kindVal,
     productId: p.id,
     qty: +f.qty.value,
@@ -1064,6 +1173,11 @@ async function saveTx(ev, force) {
       S.txs.push(d.tx); S.txPage = 1;
     }
     S.editingTxId = null;
+    if (tx.id) S.savedMsg = '';
+    else {
+      S.savedMsg = `บันทึกแล้ว: ${tx.kind === 'in' ? 'รับเข้า' : 'จ่ายออก'} ${pn(p)} × ${tx.qty}${tx.serials.length ? ' (ซีเรียล ' + tx.serials.length + ')' : ''}`;
+      S.carry = S.keepOn ? { date: tx.date, kind: tx.kind, docNo: tx.docNo, party: tx.party, ptype: p.type } : null;
+    }
     vTx();
   } catch (e) {
     if (e.data && e.data.short) {
@@ -1303,6 +1417,10 @@ function guess(raw) {
 function parseDate(v) {
   v = String(v || '').trim(); let y, m, d, x;
   if (x = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v)) { d = +x[1]; m = +x[2]; y = +x[3]; }
+  else if (x = /^(\d{1,2})[\/\-\s]*([ก-๙.]+)[\/\-\s]*(\d{4})$/.exec(v)) {
+    m = TH_MON.findIndex(n => n.replace(/\./g, '') === x[2].replace(/\./g, '')) + 1;
+    if (!m) return null; d = +x[1]; y = +x[3];
+  }
   else if (x = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v)) { y = +x[1]; m = +x[2]; d = +x[3]; }
   else return null;
   if (y > 2400) y -= 543;
