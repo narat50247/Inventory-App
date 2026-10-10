@@ -129,6 +129,28 @@ ${table}` },
       return res.json({ ocr });
     }
 
+    // ---------- อ่าน Serial Number จากรูปถ่ายสินค้า (แจ๊คเก็ต/หมวกนิรภัย) 1 รูป ----------
+    if (body.action === 'ocrserial') {
+      if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
+      if (!AI_VISION_MODEL) return fail(res, 500, 'ยังไม่ได้ตั้งค่าโมเดลอ่านรูป (ต้องมี AI_VISION_MODEL ใน Vercel Environment Variables)');
+      if (!/^data:image\/jpeg;base64,/.test(body.image || '') || body.image.length > 3.5e6) return fail(res, 400, 'ไฟล์รูปไม่ถูกต้อง หรือใหญ่เกินไป');
+      const raw = await chat(vision, [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'ในภาพนี้เป็นป้าย/ตัวอักษรบนเสื้อแจ๊คเก็ตหรือหมวกนิรภัย ให้หา Serial Number (เลขซีเรียลประจำชิ้น) รูปแบบปกติคือ ตัวเลข/ปี พ.ศ. 4 หลัก เช่น 14788/2527 หรือ 14630/2567\nกติกา: อ่านเฉพาะ Serial Number ตอบหมายเลขละ 1 บรรทัด ไม่ต้องอธิบายหรือใส่เครื่องหมายอื่น ห้ามเดาตัวเลขที่มองไม่ชัด ถ้าไม่พบ Serial Number ให้ตอบคำว่า NONE' },
+          { type: 'image_url', image_url: { url: body.image } },
+        ],
+      }], { max: 2000, timeout: 40, label: 'อ่าน Serial Number (โมเดลรูปภาพ)', extra: visionExtra, partial: true });
+      const txt = raw.replace(/\*\*/g, '');
+      const strict = [...new Set([...txt.matchAll(/\d{1,7}\s*[\/\\]\s*\d{4}/g)].map((m) => m[0].replace(/\s+/g, '').replace('\\', '/')))];
+      let serials = strict, loose = false;
+      if (!serials.length && !/^\s*NONE\b/i.test(txt)) {   // ไม่ตรงรูปแบบ N/ปี แต่ AI อ่านเจออะไรบางอย่าง ให้คนตรวจสอบ
+        serials = [...new Set(txt.split(/[\n,;]+/).map((x) => x.trim().replace(/^[-*•\d.)\s]{0,3}(?=\d)/, '')).filter((x) => /\d/.test(x) && x.length <= 40 && !/\s{2,}/.test(x)))].slice(0, 5);
+        loose = serials.length > 0;
+      }
+      return res.json({ serials: serials.slice(0, 20), loose });
+    }
+
     // ---------- ขั้นที่ 2: แยกรายการรับ/จ่ายจากข้อความ (พิมพ์เอง หรือข้อความที่อ่านจากรูป) ----------
     if (body.action === 'parse') {
       if (role !== 'editor') return fail(res, 403, 'บัญชีนี้ดูได้อย่างเดียว');
