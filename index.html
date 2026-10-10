@@ -59,6 +59,10 @@ form h2 { grid-column: 1 / -1; margin: 0 0 4px 0; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid #aab4be; border-radius: 6px; background: #fff; min-height: 38px; }
 input.need { border-color: #c0392b; background: #fdecea; }
+.scan-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.scan-log { font-size: 13px; margin-top: 6px; display: grid; gap: 3px; }
+.scan-log a { cursor: pointer; text-decoration: underline; color: var(--navy); margin-left: 6px; }
+.scan-bad { color: #b45309; }
 .saved-msg { grid-column: 1/-1; background: var(--in-bg); border: 1px solid #a5d6a7; color: #1b5e20; padding: 8px 12px; border-radius: 8px; }
 .saved-msg a { cursor: pointer; text-decoration: underline; }
 input.carried { background: #fff8d6; border-color: #e0b400; }
@@ -633,6 +637,13 @@ function vTx() {
           <textarea name="serials" rows="3" placeholder="14788/2527&#10;14630/2567" oninput="updSerCount()">${editingTx ? esc((editingTx.serials || []).join('\n')) : ''}</textarea>
         </label>
         <small id="sercnt"></small>
+        <div class="scan-bar">
+          <button type="button" class="p" onclick="$('#scam').click()">📷 ถ่ายรูปอ่าน Serial Number</button>
+          <button type="button" onclick="$('#sgal').click()">🖼️ เลือกหลายรูป</button>
+          <input type="file" id="scam" accept="image/*" capture="environment" hidden onchange="scanPick(this)">
+          <input type="file" id="sgal" accept="image/*" multiple hidden onchange="scanPick(this)">
+        </div>
+        <div id="scanlog" class="scan-log"></div>
       </div>
 
       <div class="img-field">
@@ -679,6 +690,41 @@ function updSerCount() {
   const ok = list.length === +f.qty.value;
   c.textContent = ok ? `✓ ${list.length} หมายเลข ตรงกับจำนวน` : `มี ${list.length} หมายเลข แต่จำนวนที่กรอกคือ ${f.qty.value}`;
   c.style.color = ok ? 'var(--in)' : '#b45309';
+}
+// ---------- AI อ่าน Serial Number จากรูปถ่าย (ถ่ายต่อเนื่องได้หลายรูป ก่อนกดบันทึก) ----------
+const SC = { n: 0, items: [], q: [], busy: 0 };
+function scanPick(inp) { const files = [...inp.files]; inp.value = ''; files.forEach(file => { SC.items.push({ id: ++SC.n, file, st: 'wait', found: [], warn: [] }); SC.q.push(SC.items[SC.items.length - 1]); }); scanPump(); drawScan(); }
+function scanPump() {
+  while (SC.busy < 2 && SC.q.length) { const it = SC.q.shift(); SC.busy++; scanRun(it).finally(() => { SC.busy--; scanPump(); drawScan(); }); }
+}
+async function scanRun(it) {
+  it.st = 'run'; drawScan();
+  try {
+    const dataUrl = await fileToJpegDataUrl(it.file, 1600);
+    const o = await api('ai', { action: 'ocrserial', image: dataUrl });
+    it.file = null; it.found = o.serials || []; it.loose = !!o.loose;
+    if (!it.found.length) it.st = 'none';
+    else {
+      const f = $('#tf'); if (!f) { it.st = 'ok'; return; }
+      const have = new Set(parseSerials(f.serials.value)), add = it.found.filter(x => !have.has(x));
+      it.dup = it.found.length - add.length;
+      if (add.length) f.serials.value = (f.serials.value.trim() ? f.serials.value.trim() + '\n' : '') + add.join('\n');
+      it.warn = it.found.filter(x => it.loose || !/^\d+\/(24|25)\d\d$/.test(x));
+      it.st = 'ok'; updSerCount();
+    }
+  } catch (e) { it.st = 'err'; it.err = e.message; }
+}
+function scanRetry(id) { const it = SC.items.find(x => x.id === id); if (!it || !it.file) return; it.st = 'wait'; SC.q.push(it); scanPump(); drawScan(); }
+function scanClear() { SC.items = SC.items.filter(x => x.st === 'run' || x.st === 'wait'); drawScan(); }
+function drawScan() {
+  const el = $('#scanlog'); if (!el) return;
+  const n = st => SC.items.filter(x => x.st === st).length, total = SC.items.length;
+  if (!total) { el.innerHTML = ''; return; }
+  const pend = n('wait') + n('run');
+  const bad = SC.items.filter(x => x.st === 'none' || x.st === 'err' || (x.st === 'ok' && x.warn.length));
+  el.innerHTML = `<div><b>${pend ? '⏳ ' : ''}รูปทั้งหมด ${total}</b> • อ่านสำเร็จ ${n('ok')} • ไม่พบ Serial Number ${n('none')} • ผิดพลาด ${n('err')}${pend ? ' • รอ/กำลังอ่าน ' + pend : ''} <a onclick="scanClear()">ล้างรายการนี้</a></div>` +
+    bad.map(x => `<div class="scan-bad">รูปที่ ${x.id}: ${x.st === 'none' ? '⚠️ ไม่พบ Serial Number ในรูป ถ่ายใหม่ให้ใกล้/ชัดขึ้น' : x.st === 'err' ? '❌ ' + esc(x.err) + (x.file ? ` <a onclick="scanRetry(${x.id})">ลองใหม่</a>` : '') : '⚠️ ตรวจสอบรูปแบบ: ' + x.warn.map(esc).join(', ')}</div>`).join('') +
+    `<div class="muted">ผลที่อ่านได้ถูกเติมในช่องด้านบนแล้ว (ไม่เติมซ้ำ) ตัวเลขยาวๆ AI อาจอ่านผิด ควรไล่ตรวจก่อนบันทึก</div>`;
 }
 function showStock() {
   const f = $('#tf'), id = f.pspec.value;
