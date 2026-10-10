@@ -219,7 +219,7 @@ const S = {
   editingTxId: null,
   openSer: new Set(),
   keepOn: true, carry: null, savedMsg: '',
-  serQ: '', serSt: 'in', serType: '', serLimit: 100, serOpen: new Set(),
+  serQ: '', serSt: 'in', serType: '', serPage: 1, serSize: 25, serOpen: new Set(),
   txSort: { k: 'date', dir: -1 },
   txPage: 1,
   txSize: 50
@@ -294,9 +294,9 @@ const specRank = s => {
 const bySpec = (a, c) => specRank(getItemSpec(a)) - specRank(getItemSpec(c)) || getItemSpec(a).localeCompare(getItemSpec(c), 'th', { numeric: true });
 const allTypes = () => [...new Set([...CATEGORIES, ...S.products.map(p => p.type).filter(Boolean)])];
 const allSpecs = () => [...new Set([...SIZE_MODEL_OPTIONS, ...S.products.map(p => getItemSpec(p)).filter(Boolean)])];
-// หมวดที่มีเลขซีเรียลประจำชิ้น (แก้ได้ที่นี่ ถ้ามีหมวดอื่นเพิ่ม)
+// หมวดที่มี Serial Number ประจำชิ้น (แก้ได้ที่นี่ ถ้ามีหมวดอื่นเพิ่ม)
 const usesSerial = type => /แจ๊คเก็ต|แจ็คเก็ต|หมวกนิรภัย/.test(String(type || ''));
-// แปลงข้อความเป็นรายการซีเรียล: คั่นด้วยบรรทัด/คอมมา/เว้นวรรค และขยายช่วงต่อเนื่อง เช่น 14788-14800/2527
+// แปลงข้อความเป็นรายการ Serial Number: คั่นด้วยบรรทัด/คอมมา/เว้นวรรค และขยายช่วงต่อเนื่อง เช่น 14788-14800/2527
 function parseSerials(text) {
   let s = String(text || '').replace(/[​﻿]/g, '');
   s = s.replace(/(\d+)\s*[-–~]\s*(\d+)\s*\/\s*(\d{2,4})/g, (m, a, b, y) => {
@@ -318,7 +318,7 @@ function serialWarnings(tx, editingId) {
     .forEach(t => t.serials.forEach(x => last.set(x, t.kind)));
   const dup = list.filter(x => last.get(x) === tx.kind), word = tx.kind === 'in' ? 'รับเข้า' : 'จ่ายออก', msgs = [];
   if (dup.length) msgs.push(`${word}ซ้ำ ${dup.length} หมายเลข (รายการล่าสุดของหมายเลขนี้ในระบบก็เป็น${word}): ${dup.slice(0, 5).join(', ')}${dup.length > 5 ? ' ...' : ''}`);
-  if (list.length !== tx.qty) msgs.push(`จำนวนที่กรอก ${tx.qty} แต่ใส่ซีเรียล ${list.length} หมายเลข`);
+  if (list.length !== tx.qty) msgs.push(`จำนวนที่กรอก ${tx.qty} แต่ใส่ Serial Number ${list.length} หมายเลข`);
   return msgs;
 }
 const hiddenSet = () => new Set((S.options && S.options.hiddenSpecs) || []);
@@ -413,7 +413,7 @@ function render() {
     ['dash', '📊 สรุป'],
     ['report', '📦 สินค้าคงเหลือ'],
     ['tx', '🔄 รับเข้า/จ่ายออก'],
-    ['ser', '🔢 ซีเรียล'],
+    ['ser', '🔢 Serial Number'],
     ['ai', '🤖 ผู้ช่วย AI']
   ];
   if (canEdit()) tabs.push(['items', '📝 รายการสินค้า'], ['import', '📥 นำเข้าข้อมูล']);
@@ -629,7 +629,7 @@ function vTx() {
       <label>หมายเหตุ<input name="note" value="${editingTx ? esc(editingTx.note) : ''}"></label>
 
       <div class="ser-box" id="serbox" hidden>
-        <label>เลขซีเรียล <small>(ไม่บังคับ) ใส่ทีละบรรทัด หรือคั่นด้วยคอมมา/เว้นวรรค • ช่วงต่อเนื่อง เช่น 14788-14800/2527</small>
+        <label>Serial Number <small>(ไม่บังคับ) ใส่ทีละบรรทัด หรือคั่นด้วยคอมมา/เว้นวรรค • ช่วงต่อเนื่อง เช่น 14788-14800/2527</small>
           <textarea name="serials" rows="3" placeholder="14788/2527&#10;14630/2567" oninput="updSerCount()">${editingTx ? esc((editingTx.serials || []).join('\n')) : ''}</textarea>
         </label>
         <small id="sercnt"></small>
@@ -743,14 +743,14 @@ function txRows() {
     });
 }
 
-// เลขซีเรียลซ่อนอยู่ในรายการ กดปุ่มเพื่อดู (ถ้าค้นหาด้วยเลขซีเรียล จะเปิดและไฮไลต์ให้เอง)
+// Serial Number ซ่อนอยู่ในรายการ กดปุ่มเพื่อดู (ถ้าค้นหาด้วย Serial Number จะเปิดและไฮไลต์ให้เอง)
 function serCell(t, name) {
   const list = t.serials || [];
   if (!list.length) return name;
   const q = ($('#q')?.value || '').trim().toLowerCase();
   const hit = q ? list.filter(x => x.toLowerCase().includes(q)) : [];
   const open = S.openSer.has(t.id) || (hit.length > 0 && q.length >= 3);
-  return { h: `${esc(name)}<div><button type="button" class="ser-btn" onclick="toggleSer('${t.id}')">🔢 ซีเรียล ${list.length} <span id="sa-${t.id}">${open ? '▴' : '▾'}</span></button></div>
+  return { h: `${esc(name)}<div><button type="button" class="ser-btn" onclick="toggleSer('${t.id}')">🔢 Serial Number ${list.length} <span id="sa-${t.id}">${open ? '▴' : '▾'}</span></button></div>
     <div class="ser-list" id="ser-${t.id}" ${open ? '' : 'hidden'}>${list.map(x => `<span class="chip ${hit.includes(x) ? 'c-hit' : ''}">${esc(x)}</span>`).join('')} <button type="button" class="s" onclick="copySer('${t.id}')">คัดลอก</button></div>` };
 }
 function toggleSer(id) {
@@ -818,7 +818,7 @@ async function exportTxExcel() {
   const rows = all.map(({ t, p }) => ({
     'วันที่': fmt(t.date), 'ประเภท': t.kind === 'in' ? 'รับเข้า' : 'จ่ายออก',
     'หมวดสินค้า': p ? p.type : '(สินค้าถูกลบ)', 'size / แบบ': p ? getItemSpec(p) : '',
-    'จำนวน': t.qty, 'เลขที่ส่งของ': t.docNo || '', 'ผู้ส่ง/ผู้รับ': t.party || '', 'หมายเหตุ': t.note || '', 'เลขซีเรียล': (t.serials || []).join(', '), 'ลิงก์รูปภาพ': t.image || '', 'รหัสรายการ (ห้ามแก้ไข)': t.id
+    'จำนวน': t.qty, 'เลขที่ส่งของ': t.docNo || '', 'ผู้ส่ง/ผู้รับ': t.party || '', 'หมายเหตุ': t.note || '', 'Serial Number': (t.serials || []).join(', '), 'ลิงก์รูปภาพ': t.image || '', 'รหัสรายการ (ห้ามแก้ไข)': t.id
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 28 }, { wch: 9 }, { wch: 18 }, { wch: 28 }, { wch: 24 }, { wch: 30 }, { wch: 34 }, { wch: 38 }];
@@ -831,7 +831,7 @@ async function exportTxExcel() {
     ['3. ประเภทต้องเป็น "รับเข้า" หรือ "จ่ายออก" / วันที่ใช้รูปแบบ 9 ต.ค. 2569 หรือ 09/10/2569 (พ.ศ.)'],
     ['4. หมวดสินค้า และ size / แบบ พิมพ์ให้ตรงกับในระบบ ถ้าไม่มีในระบบ จะสร้างสินค้าใหม่ให้'],
     ['5. อัปโหลดที่แท็บ รับเข้า/จ่ายออก ปุ่ม "อัปเดตจาก Excel" (แนะนำให้ Export โดยไม่ใส่คำค้น เพื่อได้ครบทุกรายการ)'],
-    ['6. คอลัมน์ "เลขซีเรียล" ใส่ได้หลายหมายเลข คั่นด้วยคอมมา เช่น 14788/2527, 14630/2567 (ช่วงต่อเนื่องใช้ 14788-14800/2527 ได้) ถ้าลบคอลัมน์นี้ทิ้ง ระบบจะไม่แตะต้องซีเรียลเดิม']
+    ['6. คอลัมน์ "Serial Number" ใส่ได้หลายหมายเลข คั่นด้วยคอมมา เช่น 14788/2527, 14630/2567 (ช่วงต่อเนื่องใช้ 14788-14800/2527 ได้) ถ้าลบคอลัมน์นี้ทิ้ง ระบบจะไม่แตะต้อง Serial Number เดิม']
   ]), 'วิธีใช้');
   XLSX.writeFile(wb, `รับเข้า-จ่ายออก_${today()}.xlsx`);
 }
@@ -918,7 +918,7 @@ function drawDraft() {
   $('#adraft').innerHTML = `
     ${AI.warnings.length ? `<div class="alert-box warn-box"><b>ข้อควรตรวจ</b><ul>${AI.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
     ${AI.rows.length ? `<p style="margin:10px 0 4px"><b>ร่างรายการ</b> ตรวจและแก้ไขได้ก่อนบันทึก ช่องสีแดงคือยังไม่ได้เลือกสินค้า</p>
-    <div class="tw"><table class="draft"><tr><th></th><th>วันที่</th><th>ประเภท</th><th>สินค้า</th><th>จำนวน</th><th>เลขที่</th><th>ผู้ส่ง/ผู้รับ</th><th>หมายเหตุ</th>${showSer ? '<th>ซีเรียล</th>' : ''}</tr>${rows}</table></div>
+    <div class="tw"><table class="draft"><tr><th></th><th>วันที่</th><th>ประเภท</th><th>สินค้า</th><th>จำนวน</th><th>เลขที่</th><th>ผู้ส่ง/ผู้รับ</th><th>หมายเหตุ</th>${showSer ? '<th>Serial Number</th>' : ''}</tr>${rows}</table></div>
     ${AI.pendingFile ? '<label style="flex-direction:row;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" id="aatt" checked style="min-height:0"> แนบรูปใบเอกสารนี้ (' + esc(AI.pendingFile.name || 'รูปที่เลือก') + ') กับทุกรายการที่บันทึก</label>' : ''}
     <button type="button" class="p" id="asave" onclick="saveDraft()" style="margin-top:8px">✅ บันทึก ${AI.rows.filter(r => r.on).length} รายการ</button>` : ''}`;
 }
@@ -944,8 +944,8 @@ async function saveDraft(force) {
 }
 
 // ===== อัปเดตข้อมูลจากไฟล์ Excel ที่ export ออกมา (แก้แล้วอัปโหลดกลับ) =====
-const XL_COL = { id: 'รหัสรายการ (ห้ามแก้ไข)', date: 'วันที่', kind: 'ประเภท', type: 'หมวดสินค้า', spec: 'size / แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'เลขซีเรียล', image: 'ลิงก์รูปภาพ' };
-const XL_LABEL = { date: 'วันที่', kind: 'ประเภท', type: 'หมวด', spec: 'size/แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'ซีเรียล', image: 'รูป' };
+const XL_COL = { id: 'รหัสรายการ (ห้ามแก้ไข)', date: 'วันที่', kind: 'ประเภท', type: 'หมวดสินค้า', spec: 'size / แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'Serial Number', image: 'ลิงก์รูปภาพ' };
+const XL_LABEL = { date: 'วันที่', kind: 'ประเภท', type: 'หมวด', spec: 'size/แบบ', qty: 'จำนวน', docNo: 'เลขที่ส่งของ', party: 'ผู้ส่ง/ผู้รับ', note: 'หมายเหตุ', serial: 'Serial Number', image: 'รูป' };
 let XL = null;
 
 function xlDate(v) {
@@ -972,8 +972,9 @@ async function readXl(inp) {
     json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
   } catch { out.textContent = '❌ อ่านไฟล์ไม่ได้ กรุณาใช้ไฟล์ .xlsx ที่ export จากระบบ'; inp.value = ''; return; }
   inp.value = '';
+  json = json.map(r => { if ('เลขซีเรียล' in r && !('Serial Number' in r)) { r['Serial Number'] = r['เลขซีเรียล']; delete r['เลขซีเรียล']; } return r; });   // รองรับไฟล์เก่าที่หัวคอลัมน์เป็นภาษาไทย
   const heads = Object.keys(json[0] || {});
-  const hasSer = heads.includes(XL_COL.serial);   // ไม่มีคอลัมน์นี้ในไฟล์ = ไม่แตะซีเรียลเดิม
+  const hasSer = heads.includes(XL_COL.serial);   // ไม่มีคอลัมน์นี้ในไฟล์ = ไม่แตะ Serial Number เดิม
   const miss = Object.entries(XL_COL).filter(([k, h]) => ['id', 'date', 'kind', 'type', 'spec', 'qty'].includes(k) && !heads.includes(h)).map(([, h]) => h);
   if (!json.length || miss.length) { out.innerHTML = `<p class="low">❌ ไม่ใช่ไฟล์ template ที่ export จากระบบ ${miss.length ? '(ไม่พบคอลัมน์: ' + esc(miss.join(', ')) + ')' : '(ไม่มีข้อมูล)'}</p>`; return; }
 
@@ -1076,7 +1077,7 @@ function cancelEditTx() {
   vTx();
 }
 
-// ---------- ซีเรียลรายชิ้น: สถานะล่าสุดของแต่ละหมายเลข ----------
+// ---------- Serial Number รายชิ้น: สถานะล่าสุดของแต่ละหมายเลข ----------
 function serialState() {
   const byId = Object.fromEntries(S.products.map(p => [p.id, p]));
   const m = new Map();
@@ -1098,41 +1099,52 @@ function vSer() {
   const all = serialState(), inN = all.filter(e => e.last.kind === 'in').length;
   const types = [...new Set(all.map(e => e.p && e.p.type).filter(Boolean))];
   $('#v').innerHTML = `
-    <div class="dash-card"><h3><span>🔢 เลขซีเรียลรายชิ้น</span></h3>
-      <p class="muted" style="margin:0 0 8px">สถานะดูจากรายการล่าสุดของแต่ละหมายเลข (รับเข้า = ยังอยู่ในคลัง, จ่ายออก = จ่ายแล้ว) เฉพาะรายการที่บันทึกเลขซีเรียลไว้</p>
+    <div class="dash-card"><h3><span>🔢 Serial Number รายชิ้น</span></h3>
+      <p class="muted" style="margin:0 0 8px">สถานะดูจากรายการล่าสุดของแต่ละหมายเลข (รับเข้า = ยังอยู่ในคลัง, จ่ายออก = จ่ายแล้ว) เฉพาะรายการที่บันทึก Serial Number ไว้</p>
       <div class="bar">
-        <input id="sq" placeholder="🔍 ค้นหาเลขซีเรียล เช่น 14788/2527" value="${esc(S.serQ)}" oninput="S.serQ=this.value;S.serLimit=100;drawSer()">
-        <select onchange="S.serSt=this.value;S.serLimit=100;drawSer()">
+        <input id="sq" placeholder="🔍 ค้นหา Serial Number เช่น 14788/2527" value="${esc(S.serQ)}" oninput="S.serQ=this.value;S.serPage=1;drawSer()">
+        <select onchange="S.serSt=this.value;S.serPage=1;drawSer()">
           <option value="in" ${S.serSt === 'in' ? 'selected' : ''}>ยังอยู่ในคลัง (${inN})</option>
           <option value="out" ${S.serSt === 'out' ? 'selected' : ''}>จ่ายออกแล้ว (${all.length - inN})</option>
           <option value="" ${S.serSt === '' ? 'selected' : ''}>ทั้งหมด (${all.length})</option></select>
-        <select onchange="S.serType=this.value;S.serLimit=100;drawSer()"><option value="">ทุกประเภท</option>${types.map(t => `<option ${S.serType === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+        <select onchange="S.serType=this.value;S.serPage=1;drawSer()"><option value="">ทุกประเภท</option>${types.map(t => `<option ${S.serType === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
         ${canEdit() ? '<button type="button" onclick="exportSerExcel()">📥 Export Excel</button>' : ''}
       </div><div id="sr"></div></div>`;
   drawSer();
 }
+function serGo(p) { S.serPage = p; drawSer(); }
+function serSizeSet(n) { S.serSize = +n; S.serPage = 1; drawSer(); }
 function drawSer() {
   const rows = serRows(), el = $('#sr'); if (!el) return;
-  if (!rows.length) { el.innerHTML = '<p class="muted">ไม่พบเลขซีเรียล (ต้องบันทึกเลขซีเรียลตอนรับเข้า/จ่ายออกก่อน)</p>'; return; }
-  const part = rows.slice(0, S.serLimit);
-  el.innerHTML = `<small class="muted">แสดง ${part.length} จาก ${rows.length} หมายเลข</small><div class="tw"><table><thead><tr><th>เลขซีเรียล</th><th>สินค้า</th><th>สถานะ</th><th>วันที่ล่าสุด</th><th>เลขที่ส่งของ</th><th>ผู้ส่ง/ผู้รับ</th><th></th></tr></thead><tbody>${part.map(e => {
+  if (!rows.length) { el.innerHTML = '<p class="muted">ไม่พบ Serial Number (ต้องบันทึก Serial Number ตอนรับเข้า/จ่ายออกก่อน)</p>'; return; }
+  const size = S.serSize || rows.length, pages = Math.max(1, Math.ceil(rows.length / size));
+  S.serPage = Math.min(Math.max(1, S.serPage), pages);
+  const part = S.serSize ? rows.slice((S.serPage - 1) * size, S.serPage * size) : rows;
+  const pager = `<div class="pager"><span>ทั้งหมด ${rows.length} หมายเลข</span>
+    <span><button class="s" ${S.serPage <= 1 ? 'disabled' : ''} onclick="serGo(${S.serPage - 1})">‹ ก่อนหน้า</button>
+    &nbsp;หน้า ${S.serPage} / ${pages}&nbsp;
+    <button class="s" ${S.serPage >= pages ? 'disabled' : ''} onclick="serGo(${S.serPage + 1})">ถัดไป ›</button></span>
+    <label style="flex-direction:row;align-items:center;gap:6px">แสดงหน้าละ
+      <select onchange="serSizeSet(this.value)">${[25, 50, 100, 0].map(n => `<option value="${n}" ${S.serSize === n ? 'selected' : ''}>${n || 'ทั้งหมด'}</option>`).join('')}</select></label></div>`;
+  const body = `<div class="tw"><table><thead><tr><th>Serial Number</th><th>สินค้า</th><th>สถานะ</th><th>วันที่ล่าสุด</th><th>เลขที่ส่งของ</th><th>ผู้ส่ง/ผู้รับ</th><th></th></tr></thead><tbody>${part.map(e => {
     const t = e.last, isIn = t.kind === 'in', k = encodeURIComponent(e.serial), open = S.serOpen.has(e.serial);
     return `<tr class="${isIn ? 'tx-in' : 'tx-out'}"><td><b>${esc(e.serial)}</b></td><td>${esc(pn(e.p) || '(สินค้าถูกลบ)')}</td>
       <td><span class="badge ${isIn ? 'badge-in' : 'badge-out'}">${isIn ? '📦 ในคลัง' : '📤 จ่ายแล้ว'}</span></td>
       <td>${fmtBE(t.date)}</td><td>${esc(t.docNo || '-')}</td><td>${esc(t.party || '-')}</td>
       <td><button class="ser-btn" onclick="toggleSerHist(decodeURIComponent('${k}'))">ประวัติ ${e.hist.length} ${open ? '▴' : '▾'}</button></td></tr>` +
       (open ? `<tr><td colspan="7" style="background:#f6f8fa">${e.hist.map(h => `${fmtBE(h.date)} — ${h.kind === 'in' ? '📥 รับเข้า' : '📤 จ่ายออก'} • ${esc(h.docNo || '-')} • ${esc(h.party || '-')}`).join('<br>')}</td></tr>` : '');
-  }).join('')}</tbody></table></div>${rows.length > part.length ? `<button type="button" onclick="S.serLimit+=200;drawSer()" style="margin-top:8px">แสดงเพิ่ม</button>` : ''}`;
+  }).join('')}</tbody></table></div>`;
+  el.innerHTML = pager + body + pager;
 }
 function toggleSerHist(x) { if (S.serOpen.has(x)) S.serOpen.delete(x); else S.serOpen.add(x); drawSer(); }
 async function exportSerExcel() {
   if (!canEdit()) return;
   const rows = serRows(); if (!rows.length) return alert('ไม่มีข้อมูลให้ส่งออก');
   try { await loadXlsx(); } catch { return alert('โหลดตัวสร้างไฟล์ Excel ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
-  const ws = XLSX.utils.json_to_sheet(rows.map(e => ({ 'เลขซีเรียล': e.serial, 'สินค้า': pn(e.p), 'สถานะ': e.last.kind === 'in' ? 'ในคลัง' : 'จ่ายแล้ว', 'วันที่ล่าสุด': fmtBE(e.last.date), 'เลขที่ส่งของ': e.last.docNo || '', 'ผู้ส่ง/ผู้รับ': e.last.party || '' })));
+  const ws = XLSX.utils.json_to_sheet(rows.map(e => ({ 'Serial Number': e.serial, 'สินค้า': pn(e.p), 'สถานะ': e.last.kind === 'in' ? 'ในคลัง' : 'จ่ายแล้ว', 'วันที่ล่าสุด': fmtBE(e.last.date), 'เลขที่ส่งของ': e.last.docNo || '', 'ผู้ส่ง/ผู้รับ': e.last.party || '' })));
   ws['!cols'] = [{ wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 24 }];
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'ซีเรียล');
-  XLSX.writeFile(wb, `ซีเรียล_${today()}.xlsx`);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Serial Number');
+  XLSX.writeFile(wb, `Serial Number_${today()}.xlsx`);
 }
 
 function toggleKeep(on) { S.keepOn = on; if (!on) S.carry = null; vTx(); }
@@ -1159,7 +1171,7 @@ async function saveTx(ev, force) {
   };
   if (!force) {
     const w = serialWarnings(tx, tx.id);
-    if (w.length && !confirm('ข้อสังเกตเรื่องเลขซีเรียล:\n- ' + w.join('\n- ') + '\nต้องการบันทึกต่อหรือไม่?')) return;
+    if (w.length && !confirm('ข้อสังเกตเรื่อง Serial Number:\n- ' + w.join('\n- ') + '\nต้องการบันทึกต่อหรือไม่?')) return;
   }
 
   const action = tx.id ? 'editTx' : 'addTx';
@@ -1175,7 +1187,7 @@ async function saveTx(ev, force) {
     S.editingTxId = null;
     if (tx.id) S.savedMsg = '';
     else {
-      S.savedMsg = `บันทึกแล้ว: ${tx.kind === 'in' ? 'รับเข้า' : 'จ่ายออก'} ${pn(p)} × ${tx.qty}${tx.serials.length ? ' (ซีเรียล ' + tx.serials.length + ')' : ''}`;
+      S.savedMsg = `บันทึกแล้ว: ${tx.kind === 'in' ? 'รับเข้า' : 'จ่ายออก'} ${pn(p)} × ${tx.qty}${tx.serials.length ? ' (Serial Number ' + tx.serials.length + ')' : ''}`;
       S.carry = S.keepOn ? { date: tx.date, kind: tx.kind, docNo: tx.docNo, party: tx.party, ptype: p.type } : null;
     }
     vTx();
